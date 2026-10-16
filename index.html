@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bariyer Alarm</title>
+<style>
+:root{--bg:#eef1f4;--ink:#14202b;--mute:#5d6b78;--card:#fff;--ok:#1f7a4d;--bad:#c62828;--line:#d5dbe1;--btn:#14202b}
+@media (prefers-color-scheme:dark){:root{--bg:#0e141a;--ink:#e9eef3;--mute:#93a1ae;--card:#17202a;--ok:#4cc38a;--bad:#ff6b6b;--line:#2a3643;--btn:#e9eef3}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px 24px}
+main{max-width:420px;margin:0 auto}
+h1{font-size:1.1rem;font-weight:600;margin:8px 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:14px}
+input{width:100%;padding:12px;margin:6px 0;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink);font-size:1rem}
+button{width:100%;padding:14px;border:0;border-radius:10px;background:var(--btn);color:var(--bg);font-size:1rem;font-weight:600;margin-top:8px}
+button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+#state{font-size:2.2rem;font-weight:700;line-height:1.1}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+small{color:var(--mute)}
+#err{color:var(--bad);min-height:1.2em;font-size:.9rem}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Bariyer Alarm</h1>
+
+<div id="login" class="card">
+  <input id="em" type="email" placeholder="E-posta" autocomplete="username">
+  <input id="pw" type="password" placeholder="Şifre" autocomplete="current-password">
+  <button id="go">Giriş yap</button>
+  <div id="err"></div>
+</div>
+
+<div id="panel" class="hidden">
+  <div class="card">
+    <div id="state">…</div>
+    <small id="last"></small>
+  </div>
+  <div class="card">
+    <button id="mute">Sireni sustur</button>
+    <button id="arm" class="alt">…</button>
+    <button id="out" class="alt">Çıkış</button>
+  </div>
+</div>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk",
+  authDomain: "bariyer-alarm.firebaseapp.com",
+  databaseURL: "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "bariyer-alarm",
+  storageBucket: "bariyer-alarm.firebasestorage.app",
+  messagingSenderId: "168181720250",
+  appId: "1:168181720250:web:75f687892c329b9b4e4e83"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const $ = id => document.getElementById(id);
+let data = {};
+
+$("go").onclick = async () => {
+  $("err").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value); }
+  catch (e) { $("err").textContent = "E-posta veya şifre hatalı."; }
+};
+$("out").onclick = () => signOut(auth);
+$("mute").onclick = () => update(ref(db, "alarm"), { siren: false, triggered: false });
+$("arm").onclick = () => update(ref(db, "alarm"), { armed: !data.armed, siren: false, triggered: false });
+
+function render() {
+  const s = $("state");
+  if (data.siren) { s.textContent = "ALARM ÇALIYOR"; s.className = "bad"; }
+  else if (!data.armed) { s.textContent = "Devre dışı"; s.className = ""; }
+  else { s.textContent = "Korunuyor"; s.className = "ok"; }
+  $("arm").textContent = data.armed ? "Sistemi devre dışı bırak" : "Sistemi etkinleştir";
+  $("last").textContent = data.lastTrigger ? "Son alarm: " + new Date(data.lastTrigger).toLocaleString("tr-TR") : "Henüz alarm yok";
+}
+
+onAuthStateChanged(auth, u => {
+  $("login").classList.toggle("hidden", !!u);
+  $("panel").classList.toggle("hidden", !u);
+  if (u) onValue(ref(db, "alarm"), snap => { data = snap.val() || {}; render(); });
+});
+</script>
+</body>
+</html>
