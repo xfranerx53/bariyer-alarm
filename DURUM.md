@@ -14,7 +14,7 @@ README.md
 Kullanıcı tek zip'i açıp içindekileri GitHub'a sürükleyerek yüklüyor. `alici` ve `verici` klasörleri Arduino IDE'de doğrudan açılabilir (klasör adı = .ino adı olmalı).
 
 ## 1. Kullanıcı ve çalışma şekli
-- Kullanıcı **kod/yazılım tarafını** yönetiyor. Donanım bağlantılarını **başka bir kişi** yapıyor, kullanıcı ona talimat aktarıyor.
+- Kullanıcı artık **hem yazılımı hem donanım bağlantılarını tek başına** yapıyor (daha önce donanımı başka biri yapıyordu, o kişi projeden ayrıldı). Kablolama tariflerini doğrudan kullanıcıya, her kabloyu tek tek, hangi uçtan hangi uca gittiğini yazarak ver. Her bağlantıdan önce "elektriği kes" hatırlat.
 - Kullanıcının elektronik/yazılım bilgisi **sıfır** seviyesinde. Anlatım: sade Türkçe, yabancı terim yok (varsa açıkla), **adım adım, hiçbir adımı atlamadan**.
 - Sonuç odaklı ilerlemek istiyor. Gereksiz uzun test listeleri istemiyor. Testleri mümkünse **panelden** (GitHub Pages) yapmak istiyor.
 - Sohbet süresi çabuk doluyor. Bu yüzden her cevapta güncel DURUM.md verilecek.
@@ -82,7 +82,7 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 - ❌ Bariyer bağlanmadı, siren ve ışık yok
 
 ## 9. Sıradaki adımlar
-1. **Bariyeri bağla.** Diğer kişi bariyerin kapağını açıp terminal bloğunun net fotoğrafını çekecek (bariyer elektriği kapalıyken). Etiketler görülmeden bağlantı tarifi verilmeyecek.
+1. **Bariyeri bağla.** Kullanıcı bariyerin kapağını açıp terminal bloğunun net fotoğrafını çekecek (bariyer elektriği kapalıyken). Etiketler görülmeden bağlantı tarifi verilmeyecek. Kullanıcıda multimetre olup olmadığı henüz bilinmiyor.
 2. Fotoğrafa göre: bariyerin 12V adaptör bağlantısı, verici ESP32'nin kendi güç kaynağı (USB 5V veya buck converter), bariyer COM→verici GND, bariyer NC→verici D27.
 3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
 4. Çift ışınlı bariyerde tek ışın mı yoksa iki ışın birlikte mi alarm veriyor, kılavuzdan/denemeyle öğren.
