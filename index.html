@@ -2,54 +2,154 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1720">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Bariyer Alarm</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <style>
-:root{--bg:#eef1f4;--ink:#14202b;--mute:#5d6b78;--card:#fff;--ok:#1f7a4d;--bad:#c62828;--line:#d5dbe1;--btn:#14202b}
-@media (prefers-color-scheme:dark){:root{--bg:#0e141a;--ink:#e9eef3;--mute:#93a1ae;--card:#17202a;--ok:#4cc38a;--bad:#ff6b6b;--line:#2a3643;--btn:#e9eef3}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px 24px}
-main{max-width:420px;margin:0 auto}
-h1{font-size:1.1rem;font-weight:600;margin:8px 0 16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:14px}
-input{width:100%;padding:12px;margin:6px 0;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink);font-size:1rem}
-button{width:100%;padding:14px;border:0;border-radius:10px;background:var(--btn);color:var(--bg);font-size:1rem;font-weight:600;margin-top:8px}
+:root{
+  --bg:#eef1f4;--ink:#14202b;--mute:#5d6b78;--card:#ffffff;--line:#d9dfe5;
+  --ok:#1f7a4d;--okbg:#e3f3EA;--bad:#c62828;--badbg:#fde8e8;--warn:#a15c00;--warnbg:#fff1d6;
+  --btn:#14202b;--btnink:#ffffff;--soft:#f4f6f8
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d131a;--ink:#e9eef3;--mute:#93a1ae;--card:#161f29;--line:#27323f;
+  --ok:#4cc38a;--okbg:#12281e;--bad:#ff6b6b;--badbg:#321517;--warn:#f0b254;--warnbg:#33260e;
+  --btn:#e9eef3;--btnink:#0d131a;--soft:#1b2631
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:max(14px,env(safe-area-inset-top)) 14px max(24px,env(safe-area-inset-bottom));line-height:1.35}
+main{max-width:460px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;margin:6px 2px 14px}
+h1{font-size:1.05rem;font-weight:700;margin:0;letter-spacing:.2px}
+h2{font-size:.78rem;font-weight:700;margin:0 0 12px;color:var(--mute);text-transform:uppercase;letter-spacing:.8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:12px}
+.hidden{display:none!important}
+input,select{width:100%;padding:13px;margin:6px 0;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--ink);font-size:1rem;font-family:inherit}
+button{width:100%;padding:14px;border:0;border-radius:12px;background:var(--btn);color:var(--btnink);font-size:1rem;font-weight:650;margin-top:8px;font-family:inherit;cursor:pointer}
 button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
-#state{font-size:2.2rem;font-weight:700;line-height:1.1}
-.ok{color:var(--ok)}.bad{color:var(--bad)}
-small{color:var(--mute)}
-#err{color:var(--bad);min-height:1.2em;font-size:.9rem}
-.hidden{display:none}
+button.danger{background:var(--bad);color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size:.9rem;margin-top:10px;text-decoration:underline;padding:6px}
+.small{color:var(--mute);font-size:.85rem}
+#err{color:var(--bad);min-height:1.2em;font-size:.9rem;margin-top:6px}
+
+/* durum kartı */
+.hero{display:flex;align-items:center;gap:16px;border-width:1.5px}
+.hero.ok{background:var(--okbg);border-color:var(--ok)}
+.hero.bad{background:var(--badbg);border-color:var(--bad)}
+.hero.off{background:var(--soft)}
+.dot{width:54px;height:54px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:26px;background:var(--card);border:2px solid var(--line)}
+.hero.ok .dot{border-color:var(--ok)}
+.hero.bad .dot{border-color:var(--bad);animation:pulse 1s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(198,40,40,.55)}100%{box-shadow:0 0 0 18px rgba(198,40,40,0)}}
+@media (prefers-reduced-motion:reduce){.hero.bad .dot{animation:none}}
+#state{font-size:1.55rem;font-weight:800;line-height:1.1}
+.hero.ok #state{color:var(--ok)}.hero.bad #state{color:var(--bad)}
+
+/* cihazlar */
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0;padding-top:0}
+.row b{font-weight:650}
+.chip{font-size:.8rem;font-weight:700;padding:4px 10px;border-radius:99px;white-space:nowrap}
+.chip.ok{background:var(--okbg);color:var(--ok)}
+.chip.bad{background:var(--badbg);color:var(--bad)}
+.chip.warn{background:var(--warnbg);color:var(--warn)}
+.chip.na{background:var(--soft);color:var(--mute)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* log */
+#log{list-style:none;margin:0;padding:0}
+#log li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line);align-items:flex-start}
+#log li:first-child{border-top:0;padding-top:0}
+#log .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--soft);font-size:15px}
+#log .t{flex:1;min-width:0}
+#log .t b{display:block;font-weight:650;font-size:.95rem}
+#log .w{font-size:.78rem;color:var(--mute);white-space:nowrap;text-align:right}
+#log li.al .ic{background:var(--badbg)}
+
+#banner{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:10px 14px;font-size:.9rem;font-weight:600;margin-bottom:12px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(22px,env(safe-area-inset-bottom));background:var(--ink);color:var(--bg);
+  padding:11px 18px;border-radius:12px;font-size:.92rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%;z-index:5}
+#toast.show{opacity:1}
+.userbar{display:flex;gap:8px;align-items:center}
+.userbar span{font-size:.82rem;color:var(--mute);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.userbar button{width:auto;padding:7px 12px;margin:0;font-size:.85rem}
 </style>
 </head>
 <body>
 <main>
-<h1>Bariyer Alarm</h1>
+<header>
+  <h1>🛡️ Bariyer Alarm</h1>
+  <div class="userbar hidden" id="userbar"><span id="who"></span><button class="alt" id="out">Çıkış</button></div>
+</header>
 
+<!-- GİRİŞ -->
 <div id="login" class="card">
+  <h2>Giriş</h2>
   <input id="em" type="email" placeholder="E-posta" autocomplete="username">
   <input id="pw" type="password" placeholder="Şifre" autocomplete="current-password">
   <button id="go">Giriş yap</button>
   <div id="err"></div>
+  <button class="link" id="reset">Şifremi unuttum</button>
 </div>
 
+<!-- PANEL -->
 <div id="panel" class="hidden">
-  <div class="card">
-    <div id="state">…</div>
-    <small id="last"></small>
+  <div id="banner" class="hidden">Bağlantı yok. Veriler güncellenmiyor olabilir.</div>
+
+  <div id="hero" class="card hero off">
+    <div class="dot" id="dot">…</div>
+    <div>
+      <div id="state">Yükleniyor</div>
+      <div class="small" id="last"></div>
+    </div>
   </div>
+
   <div class="card">
-    <button id="mute">Sireni sustur</button>
+    <button id="mute" class="danger">Sireni sustur</button>
     <button id="arm" class="alt">…</button>
-    <button id="out" class="alt">Çıkış</button>
+  </div>
+
+  <div class="card">
+    <h2>Cihazlar</h2>
+    <div class="row"><div><b>Alıcı</b><div class="small" id="aliciInfo">—</div></div><span class="chip na" id="aliciChip">—</span></div>
+    <div class="row"><div><b>Verici</b><div class="small" id="vericiInfo">—</div></div><span class="chip na" id="vericiChip">—</span></div>
+    <div class="row"><div><b>Bariyer ışını</b><div class="small" id="beamInfo">Vericiden gelen son bilgi</div></div><span class="chip na" id="beamChip">—</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Test ve ayar</h2>
+    <button id="test" class="alt">Siren testi (3 saniye)</button>
+    <div class="small" style="margin-top:8px">Alıcıdaki röleyi 3 saniye çalıştırır. Alarm kaydına yazılmaz, sadece işlem geçmişine eklenir.</div>
+    <label class="small" for="dur" style="display:block;margin-top:14px">Siren en fazla ne kadar çalsın?</label>
+    <select id="dur">
+      <option value="30">30 saniye</option>
+      <option value="60">1 dakika</option>
+      <option value="120">2 dakika</option>
+      <option value="300">5 dakika</option>
+      <option value="600">10 dakika</option>
+      <option value="0">Ben susturana kadar</option>
+    </select>
+    <button class="alt" id="notif">Bildirimleri aç</button>
+    <div class="small" style="margin-top:8px">Bildirim sadece bu sayfa açıkken gelir (sekme arka planda olabilir).</div>
+  </div>
+
+  <div class="card">
+    <h2>Son olaylar</h2>
+    <ul id="log"><li class="small">Henüz kayıt yok</li></ul>
   </div>
 </div>
 </main>
+<div id="toast"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, onValue, update, push, serverTimestamp, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk",
@@ -65,30 +165,160 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 const $ = id => document.getElementById(id);
-let data = {};
 
+let alarm = {}, status = {}, logs = [], offset = 0, connected = true, prevSiren = null, subs = [];
+
+/* ---------- yardımcılar ---------- */
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),2600); }
+const now = () => Date.now() + offset;
+function ago(ts){
+  if(!ts) return "";
+  const s = Math.max(0, Math.round((now()-ts)/1000));
+  if(s<10) return "az önce";
+  if(s<60) return s+" sn önce";
+  if(s<3600) return Math.round(s/60)+" dk önce";
+  if(s<86400) return Math.round(s/3600)+" sa önce";
+  return new Date(ts).toLocaleDateString("tr-TR");
+}
+const clock = ts => ts ? new Date(ts).toLocaleString("tr-TR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "";
+function setChip(id, cls, text){ const c=$(id); c.className="chip "+cls; c.textContent=text; }
+
+/* ---------- eylemler ---------- */
+async function act(type, updates){
+  try{
+    if(updates) await update(ref(db,"alarm"), updates);
+    await push(ref(db,"log"), { type, by: auth.currentUser.email, t: serverTimestamp() });
+    return true;
+  }catch(e){ toast("İşlem başarısız. Bağlantını kontrol et."); return false; }
+}
+$("mute").onclick = async () => { if(await act("mute",{siren:false,triggered:false})) toast("Siren susturuldu"); };
+$("arm").onclick = async () => {
+  if(alarm.armed && !confirm("Sistemi devre dışı bırakmak istediğine emin misin? Işın kesilse bile alarm çalmaz.")) return;
+  const on = !alarm.armed;
+  if(await act(on?"arm":"disarm",{armed:on,siren:false,triggered:false})) toast(on?"Sistem etkin":"Sistem devre dışı");
+};
+$("test").onclick = async () => {
+  if(await act("test",{test:true})) toast("Test komutu gönderildi. Alıcıda röle tıklamalı.");
+};
+$("dur").onchange = async e => {
+  try{ await update(ref(db,"alarm"),{sirenSeconds:Number(e.target.value)}); toast("Siren süresi kaydedildi"); }
+  catch(_){ toast("Kaydedilemedi"); }
+};
+$("notif").onclick = async () => {
+  if(!("Notification" in window)) return toast("Bu tarayıcı bildirimi desteklemiyor");
+  const p = await Notification.requestPermission();
+  toast(p==="granted" ? "Bildirimler açık" : "Bildirim izni verilmedi");
+};
+
+/* ---------- giriş ---------- */
 $("go").onclick = async () => {
   $("err").textContent = "";
-  try { await signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value); }
-  catch (e) { $("err").textContent = "E-posta veya şifre hatalı."; }
+  try{ await signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value); }
+  catch(e){ $("err").textContent = "E-posta veya şifre hatalı."; }
+};
+$("pw").addEventListener("keydown", e => { if(e.key==="Enter") $("go").click(); });
+$("reset").onclick = async () => {
+  const em = $("em").value.trim();
+  if(!em) { $("err").textContent = "Önce e-posta adresini yaz."; return; }
+  try{ await sendPasswordResetEmail(auth, em); $("err").textContent = "Şifre sıfırlama e-postası gönderildi."; }
+  catch(e){ $("err").textContent = "Gönderilemedi. Adresi kontrol et."; }
 };
 $("out").onclick = () => signOut(auth);
-$("mute").onclick = () => update(ref(db, "alarm"), { siren: false, triggered: false });
-$("arm").onclick = () => update(ref(db, "alarm"), { armed: !data.armed, siren: false, triggered: false });
 
-function render() {
-  const s = $("state");
-  if (data.siren) { s.textContent = "ALARM ÇALIYOR"; s.className = "bad"; }
-  else if (!data.armed) { s.textContent = "Devre dışı"; s.className = ""; }
-  else { s.textContent = "Korunuyor"; s.className = "ok"; }
-  $("arm").textContent = data.armed ? "Sistemi devre dışı bırak" : "Sistemi etkinleştir";
-  $("last").textContent = data.lastTrigger ? "Son alarm: " + new Date(data.lastTrigger).toLocaleString("tr-TR") : "Henüz alarm yok";
+/* ---------- çizim ---------- */
+function alarmNotify(){
+  try{ navigator.vibrate && navigator.vibrate([300,150,300,150,600]); }catch(_){}
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type="square"; o.frequency.value=880; g.gain.value=.08; o.connect(g); g.connect(ctx.destination);
+    o.start(); setTimeout(()=>{o.stop();ctx.close();},700);
+  }catch(_){}
+  if("Notification" in window && Notification.permission==="granted"){
+    try{ new Notification("🚨 Bariyer alarmı", { body:"Işın kesildi, siren çalıyor.", tag:"bariyer" }); }catch(_){}
+  }
 }
+
+function renderHero(){
+  const hero=$("hero");
+  let cls="off", dot="…", txt="Yükleniyor";
+  if(alarm.siren){ cls="bad"; dot="🚨"; txt="ALARM ÇALIYOR"; }
+  else if(alarm.armed===false){ cls="off"; dot="⏸"; txt="Devre dışı"; }
+  else if(alarm.armed===true){ cls="ok"; dot="✓"; txt="Korunuyor"; }
+  hero.className="card hero "+cls; $("dot").textContent=dot; $("state").textContent=txt;
+  $("last").textContent = alarm.lastTrigger ? "Son alarm: "+ago(alarm.lastTrigger)+" ("+clock(alarm.lastTrigger)+")" : "Henüz alarm yok";
+  document.title = alarm.siren ? "🚨 ALARM – Bariyer" : "Bariyer Alarm";
+  $("mute").disabled = !alarm.siren;
+  $("mute").textContent = alarm.siren ? "Sireni sustur" : "Siren çalmıyor";
+  $("arm").textContent = alarm.armed ? "Sistemi devre dışı bırak" : "Sistemi etkinleştir";
+  if(alarm.sirenSeconds!==undefined) $("dur").value = String(alarm.sirenSeconds);
+  else $("dur").value = "60";
+}
+
+function renderDevices(){
+  const ONLINE = 100000;
+  const a = status.alici, v = status.verici;
+  if(a && a.lastSeen){
+    const on = now()-a.lastSeen < ONLINE;
+    setChip("aliciChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı");
+    $("aliciInfo").textContent = ago(a.lastSeen) + (a.rssi ? " · Wi-Fi sinyal "+a.rssi+" dBm" : "");
+  }else{ setChip("aliciChip","na","Bilgi yok"); $("aliciInfo").textContent="Henüz bilgi gelmedi"; }
+
+  if(v && v.lastSeen){
+    const on = now()-v.lastSeen < ONLINE;
+    setChip("vericiChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı");
+    $("vericiInfo").textContent = ago(v.lastSeen);
+    if(on){
+      if(v.contact){ setChip("beamChip","bad","Kesik / bağlı değil"); }
+      else { setChip("beamChip","ok","Normal"); }
+      $("beamInfo").textContent = v.contact ? "Kontak açık: ışın kesik veya kablo bağlı değil" : "Kontak kapalı: ışın sağlam";
+    }else{ setChip("beamChip","na","Bilinmiyor"); $("beamInfo").textContent="Verici çevrimdışı"; }
+  }else{
+    setChip("vericiChip","na","Bilgi yok"); $("vericiInfo").textContent="Henüz bilgi gelmedi";
+    setChip("beamChip","na","Bilinmiyor"); $("beamInfo").textContent="Vericiden bilgi bekleniyor";
+  }
+}
+
+const LABEL = {
+  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Siren susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
+  disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"]
+};
+const WHO = { verici:"Bariyer", alici:"Alıcı" };
+function renderLog(){
+  const ul=$("log");
+  if(!logs.length){ ul.innerHTML='<li class="small">Henüz kayıt yok</li>'; return; }
+  ul.innerHTML = logs.map(l=>{
+    const L = LABEL[l.type] || ["•", l.type||"Olay"];
+    const by = WHO[l.by] || (l.by||"").split("@")[0];
+    return `<li class="${L[2]?"al":""}"><div class="ic">${L[0]}</div><div class="t"><b>${L[1]}</b><span class="small">${by}</span></div><div class="w">${ago(l.t)}<br>${clock(l.t).slice(-8)}</div></li>`;
+  }).join("");
+}
+function renderAll(){ renderHero(); renderDevices(); renderLog(); }
+setInterval(()=>{ if(!$("panel").classList.contains("hidden")) renderAll(); }, 5000);
+
+/* ---------- veri akışı ---------- */
+function listen(){
+  unlisten();
+  subs.push(onValue(ref(db,".info/serverTimeOffset"), s => { offset = s.val()||0; }));
+  subs.push(onValue(ref(db,".info/connected"), s => { connected = !!s.val(); $("banner").classList.toggle("hidden", connected); }));
+  subs.push(onValue(ref(db,"alarm"), s => {
+    alarm = s.val() || {};
+    if(prevSiren===false && alarm.siren===true) alarmNotify();
+    prevSiren = !!alarm.siren;
+    renderHero();
+  }));
+  subs.push(onValue(ref(db,"status"), s => { status = s.val() || {}; renderDevices(); }));
+  subs.push(onValue(query(ref(db,"log"), limitToLast(30)), s => {
+    const arr=[]; s.forEach(c=>{ arr.push(c.val()); }); logs = arr.reverse(); renderLog();
+  }));
+}
+function unlisten(){ subs.forEach(u=>u()); subs=[]; prevSiren=null; }
 
 onAuthStateChanged(auth, u => {
   $("login").classList.toggle("hidden", !!u);
   $("panel").classList.toggle("hidden", !u);
-  if (u) onValue(ref(db, "alarm"), snap => { data = snap.val() || {}; render(); });
+  $("userbar").classList.toggle("hidden", !u);
+  if(u){ $("who").textContent = u.email; listen(); } else unlisten();
 });
 </script>
 </body>
