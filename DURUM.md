@@ -1,4 +1,4 @@
-# DURUM (Son güncelleme: 17 Ekim 2026)
+# DURUM (Son güncelleme: 17 Ekim 2026, akşam)
 
 > **Yeni bir Claude sohbetine başlıyorsan:** Bu repo zip'ini sohbete yükle. Claude bu dosyayı okuyup kaldığımız yerden devam eder.
 > **Claude için kural:** Her cevabın sonunda güncel `DURUM.md` dosyasını ver. Kullanıcı bunu GitHub'a yükleyecek.
@@ -54,13 +54,13 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 ## 6. Yazılım durumu
 | Parça | Dosya | Durum |
 |---|---|---|
-| Panel (web) | `index.html` | **v2 hazır, henüz GitHub'a yüklenmedi.** v1 yayında ve çalışıyor (giriş, alarm, sustur, devre dışı doğrulandı). |
-| Alıcı kodu | `alici/alici.ino` | **v2 hazır, henüz yüklenmedi.** v1 (Firebase→röle) alıcıda çalışıyor. |
-| Verici kodu | `verici/verici.ino` | **v2 hazır, henüz yüklenmedi.** v1 yüklü, "Verici hazir" yazıyor. |
+| Panel (web) | `index.html` | **v2 yayında ve çalışıyor** (kullanıcının ekran görüntüsüyle doğrulandı). Küçük düzeltme: siren süre listesi açıkken kendiliğinden sıfırlanmıyor (bu sürümde, GitHub'a yüklenmesi gerek). |
+| Alıcı kodu | `alici/alici.ino` | **v2 yüklü ve çalışıyor** (COM3). |
+| Verici kodu | `verici/verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
-v2 ile gelenler: panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi (log), tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
+v2 özellikleri: panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
 
-**Önemli:** v2 verici ve alıcı **birlikte** yüklenmeli (mesaj biçimi değişti, `MAGIC` 0xB4A10002). Biri eskiyse haberleşmez.
+Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
 
 ## 7. Firebase veri yapısı
 ```
@@ -72,22 +72,24 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 
 ## 8. Doğrulananlar / doğrulanmayanlar
 - ✅ Firebase kurulumu, kurallar, `alarm` verisi
-- ✅ Panel (v1) girişi ve alarm/sustur/devre dışı akışı
-- ✅ Alıcı: Firebase `siren=true` → röle çekiyor
-- ✅ Verici ve alıcı derleniyor ve açılıyor
-- ❓ **ESP-NOW ile verici→alıcı alarm iletimi gerçek kartlarda henüz test sonucu bildirilmedi**
-- ❓ v2 kodlarının derleme sonucu henüz bilinmiyor (derleme hatası çıkarsa kullanıcı yapıştıracak)
+- ✅ Panel v2 girişi ve görünümü (Korunuyor, cihazlar, test butonu)
+- ✅ Alıcı ve verici v2 derlendi, yüklendi, panelde ikisi de "Çevrimiçi"
+- ✅ **ESP-NOW çalışıyor:** verici kalp atışları alıcıya ulaşıp panele yansıyor (verici → alıcı yolu kanıtlı)
+- ✅ Panelden "Siren testi" → alıcı rölesi "tık" yapıyor (panel → Firebase → alıcı → röle yolu kanıtlı)
+- ✅ Panelde bariyer ışını "Kesik / bağlı değil" görünüyor. Bu **doğru**: verici D27'ye henüz hiçbir şey bağlı değil, pin boşta HIGH okuyor.
+- ❓ Gerçek alarm (D27 kontağı açılınca) uçtan uca henüz denenmedi. Bariyer bağlanınca denenecek.
+- ❓ Siren süre ayarı panelde 30 sn görünüyordu; varsayılan 60. Kullanıcı seçmiş olabilir, önemli değil.
 - ❌ Bariyer bağlanmadı, siren ve ışık yok
 
 ## 9. Sıradaki adımlar
-1. v2 alıcı + verici yükle, `index.html` v2'yi GitHub'a yükle.
-2. Panelden doğrula: cihazlar "Çevrimiçi", "Siren testi" röleyi tıklatıyor.
-3. Vericide D27–GND jumper ile alarm testi (jumper çekilince röle çekmeli, panelde alarm ve olay görünmeli).
-4. Bariyer terminallerini (fotoğrafla) teyit edip bariyeri bağla.
-5. Siren (12V) geldiğinde röle kanal 1'e bağla.
+1. **Bariyeri bağla.** Diğer kişi bariyerin kapağını açıp terminal bloğunun net fotoğrafını çekecek (bariyer elektriği kapalıyken). Etiketler görülmeden bağlantı tarifi verilmeyecek.
+2. Fotoğrafa göre: bariyerin 12V adaptör bağlantısı, verici ESP32'nin kendi güç kaynağı (USB 5V veya buck converter), bariyer COM→verici GND, bariyer NC→verici D27.
+3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
+4. Çift ışınlı bariyerde tek ışın mı yoksa iki ışın birlikte mi alarm veriyor, kılavuzdan/denemeyle öğren.
+5. Siren (12V DC) geldiğinde röle kanal 1'e bağla: 12V(+)→COM, NO→siren(+), siren(−)→12V(−).
 6. **Işık ekle:** alıcıda D25/IN2 rölesi, panelden açma/kapama ve alarmda yanma. Henüz yazılmadı.
-7. Sahaya kurulum: kutu, güç (buck converter veya 5V adaptör), Wi-Fi sinyali, bariyer hizalaması.
-8. Güvenlik: ESP şifresini değiştir, Wi-Fi şifresi sohbette paylaşıldığı için değiştirmeyi düşün.
+7. Sahaya kurulum: su geçirmez kutu, güç, Wi-Fi sinyali (alıcı şu an -68 dBm, orta), bariyer hizalaması.
+8. Güvenlik: ESP şifresi ve Wi-Fi şifresi değiştirilecek (kullanıcı kendisi yapacak).
 
 ## 10. Bilinen sınırlar
 - Alıcı internetsizken panel bilgisi güncellenmez; siren yine çalar, siren süre sınırıyla kendiliğinden susar.

@@ -251,8 +251,9 @@ function renderHero(){
   $("mute").disabled = !alarm.siren;
   $("mute").textContent = alarm.siren ? "Sireni sustur" : "Siren çalmıyor";
   $("arm").textContent = alarm.armed ? "Sistemi devre dışı bırak" : "Sistemi etkinleştir";
-  if(alarm.sirenSeconds!==undefined) $("dur").value = String(alarm.sirenSeconds);
-  else $("dur").value = "60";
+  if(document.activeElement !== $("dur")){   // kullanıcı listeyi açıkken değeri bozma
+    $("dur").value = String(alarm.sirenSeconds !== undefined ? alarm.sirenSeconds : 60);
+  }
 }
 
 function renderDevices(){
