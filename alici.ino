@@ -1,11 +1,14 @@
-// ALICI (ESP32 #2)  |  Sürüm 3.3
+// ALICI (ESP32 #2)  |  Sürüm 3.4
 // Görevi: vericiden ESP-NOW ile alarm almak, siren rölesini çekmek,
 // Firebase'e bildirmek, panelden gelen komutları (sustur, test, süre, devre dışı) uygulamak.
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
 //            kart "Bariyer-Alici-Kurulum" adında kendi Wi-Fi ağını açar, telefondan bağlanıp
 //            yeni Wi-Fi bilgisi girilir.
-// YENİ (v3.3): Otomatik susturma. Panelde "Alarm kendiliğinden susturulsun" süresi yazılırsa, alarm
-//            sen butona basmasan bile o süre sonunda susturulur (siren+ışık durur, alarm durumu temizlenir).
+// v3.3/3.4:  Otomatik susturma. Siren ve ışığın panelde seçilen süreleri (ikisi de) dolunca alarm,
+//            sen butona basmasan bile kendiliğinden susturulur ("Alarmı sustur" otomatik basılır).
+//            Siren veya alarm ışığı süresiz (boş/0) ise otomatik susturma yoktur.
+// YENİ (v3.4): Zamanlama. Panelden seçilen saat aralığı ve günlerde koruma devrededir, dışında alarm vermez.
+//            Saat NTP ile alınır (Türkiye saati, UTC+3). Saat alınamazsa güvenli tarafta kalır: koruma açık.
 // Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
 // Siren ve ışık ayrı ayrı ayarlanır: sürekli/aralıklı, aralık süresi, en fazla süre (panelden).
 // Wi-Fi ve ESP şifresi aynı klasördeki secrets.h dosyasındadır (ilk açılışta kullanılır).
@@ -16,10 +19,11 @@
 #include <DNSServer.h>
 #include <Preferences.h>
 #include <esp_now.h>
+#include <time.h>
 #include "secrets.h"
 
 const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
-const char* FW = "3.3";                 // yazılım sürümü (panelde görünür)
+const char* FW = "3.4";                 // yazılım sürümü (panelde görünür)
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
@@ -54,7 +58,11 @@ volatile uint8_t vContact = 0;       // 1 = bariyer kontağı açık
 volatile unsigned long testUntil = 0;
 unsigned long lastStatus = 0, lastMacPrint = 0;
 volatile int sirenSeconds = 60;      // panelden ayarlanır, 0 = susturana kadar
-volatile int autoMuteSeconds = 0;    // alarm bu süre sonunda kendiliğinden susturulur, 0 = kapalı (panelden)
+volatile bool schedOn = false;       // zamanlama açık mı (panelden)
+volatile int schedStartMin = 0;      // koruma başlangıcı (gün başından dakika)
+volatile int schedEndMin = 0;        // koruma bitişi (başlangıçla aynıysa 24 saat)
+volatile int schedDays = 127;        // gün maskesi: bit0 = Pazartesi ... bit6 = Pazar
+volatile bool schedActiveNow = true; // şu an zamanlamaya göre koruma devrede mi
 volatile unsigned long alarmSeq = 0; // kabul edilen her yeni alarmda artar (otomatik susturma sayacını yeniler)
 volatile bool mutePending = false;   // otomatik susturuldu, Firebase'e yazılacak
 
@@ -74,6 +82,21 @@ volatile int lightSeconds = 0;           // alarmda ışık en fazla kaç sn yan
 // ---------------------------------------------------------------- röle
 void relay(int pin, bool on) { digitalWrite(pin, (on != ACTIVE_LOW) ? HIGH : LOW); }
 
+// ---------------------------------------------------------------- zamanlama
+bool computeSched() {
+  if (!schedOn) return true;
+  time_t t = time(nullptr);
+  if (t < 1700000000) return true;                 // saat henüz alınamadı: güvenli taraf (koruma açık)
+  struct tm tmv; localtime_r(&t, &tmv);
+  int day = (tmv.tm_wday + 6) % 7;                 // 0 = Pazartesi
+  int prev = (day + 6) % 7;
+  int m = tmv.tm_hour * 60 + tmv.tm_min;
+  int a = schedStartMin, b = schedEndMin, d = schedDays;
+  if (a == b) return (d >> day) & 1;               // başlangıç = bitiş: seçili günlerde 24 saat
+  if (a < b) return ((d >> day) & 1) && m >= a && m < b;
+  return (((d >> day) & 1) && m >= a) || (((d >> prev) & 1) && m < b);   // gece yarısını aşan aralık
+}
+
 // ---------------------------------------------------------------- ESP-NOW
 void handleMsg(const uint8_t* data, int len) {
   if (len != sizeof(Msg)) return;
@@ -81,7 +104,7 @@ void handleMsg(const uint8_t* data, int len) {
   if (m.magic != MAGIC) return;
   if (m.type == T_ALARM) {
     rxAlarms++;
-    if (armed) {
+    if (armed && schedActiveNow) {
       if (!alarmActive || sirenRepeat) { sirenOn = true; alarmActive = true; fbPending = true; alarmSeq++; }
       else ignoredAlarms++;     // aynı alarm içinde tekrar kesinti: siren yeniden çalmaz
     }
@@ -146,15 +169,25 @@ void uiTask(void*) {
 // yanıp sönme düzgün kalır ve alarm gelince röle hemen çeker.
 void outputTask(void*) {
   bool prevAlarm = false, prevSiren = false, prevAuto = false;
-  unsigned long alarmStart = 0, sirenStartT = 0, autoStart = 0, seenSeq = 0;
+  unsigned long alarmStart = 0, sirenStartT = 0, autoStart = 0, seenSeq = 0, lastSched = 0;
   for (;;) {
     unsigned long now = millis();
     bool testActive = (long)(testUntil - now) > 0;
 
-    // Otomatik susturma: alarm verildi, süre doldu, butona basılmadı -> kendiliğinden sustur
+    // Zamanlama (saniyede bir)
+    if (now - lastSched > 1000) { lastSched = now; schedActiveNow = computeSched(); }
+
+    // Otomatik susturma: siren ve ışık süreleri dolunca alarm kendiliğinden susturulur
+    // (siren süresiz veya alarm ışığı süresizse otomatik susturma yok)
+    int autoSec = 0;
+    {
+      int sl = sirenSeconds, ll = lightWithAlarm ? lightSeconds : 0;
+      bool unlimited = (sl <= 0) || (lightWithAlarm && ll <= 0);
+      if (!unlimited) autoSec = sl > ll ? sl : ll;
+    }
     if (alarmActive && (!prevAuto || alarmSeq != seenSeq)) autoStart = now;   // yeni alarm: sayaç baştan
     prevAuto = alarmActive; seenSeq = alarmSeq;
-    if (alarmActive && autoMuteSeconds > 0 && now - autoStart >= (unsigned long)autoMuteSeconds * 1000UL) {
+    if (alarmActive && autoSec > 0 && now - autoStart >= (unsigned long)autoSec * 1000UL) {
       mutePending = true;     // önce bayrak, sonra kapat (ana döngü araya girip geri açmasın)
       alarmActive = false;
       sirenOn = false;
@@ -328,11 +361,12 @@ void setup() {
   relay(SIREN_PIN, false);
   relay(LIGHT_PIN, false);
 
+  configTime(3 * 3600, 0, "pool.ntp.org", "time.google.com");   // Türkiye saati (UTC+3)
   loadCreds();
   WiFi.mode(WIFI_STA);
   initEspNow();
   xTaskCreate(uiTask, "ui", 4096, NULL, 1, NULL);
-  xTaskCreate(outputTask, "out", 3072, NULL, 1, NULL);
+  xTaskCreate(outputTask, "out", 4096, NULL, 1, NULL);
 
   Serial.printf("ALICI yazilim v%s\n", FW);
   Serial.print("ALICI MAC: ");
@@ -401,8 +435,13 @@ void loop() {
       bool fbSiren = r.indexOf("\"siren\":true") >= 0;
       int i = r.indexOf("\"sirenSeconds\":");
       sirenSeconds = (i >= 0) ? r.substring(i + 15).toInt() : 60;
-      int am = r.indexOf("\"autoMuteSeconds\":");
-      autoMuteSeconds = (am >= 0) ? r.substring(am + 18).toInt() : 0;
+      schedOn = r.indexOf("\"schedOn\":true") >= 0;
+      int z = r.indexOf("\"schedStart\":");
+      schedStartMin = (z >= 0) ? r.substring(z + 13).toInt() : 0;
+      z = r.indexOf("\"schedEnd\":");
+      schedEndMin = (z >= 0) ? r.substring(z + 11).toInt() : 0;
+      z = r.indexOf("\"schedDays\":");
+      schedDays = (z >= 0) ? (r.substring(z + 12).toInt() & 127) : 127;
       sirenRepeat = r.indexOf("\"sirenRepeat\":false") < 0;
       sirenBlink = r.indexOf("\"sirenMode\":\"blink\"") >= 0;
       int k = r.indexOf("\"sirenMs\":");

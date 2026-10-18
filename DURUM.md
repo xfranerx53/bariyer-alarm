@@ -67,19 +67,18 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 | Parça | Dosya | Durum |
 |---|---|---|
 | Panel (web) | `index.html` | **v2 yayında ve çalışıyor** (kullanıcının ekran görüntüsüyle doğrulandı). Küçük düzeltme: siren süre listesi açıkken kendiliğinden sıfırlanmıyor (bu sürümde, GitHub'a yüklenmesi gerek). |
-| Alıcı kodu | `alici.ino` | **v3.3 hazır, henüz yüklenmedi** (v3: telefondan Wi-Fi kurulumu + ışık kontrolü; v3.3: otomatik susturma). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
+| Alıcı kodu | `alici.ino` | **v3.4 hazır, henüz yüklenmedi** (v3: telefondan Wi-Fi kurulumu + ışık kontrolü; v3.4: otomatik susturma + zamanlama). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
 | Verici kodu | `verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
 v2 özellikleri (v3 ile panele **ayrı Siren ve Işık ayar kartları** eklendi. İkisinde de: Sürekli/Aralıklı mod, aralık süresi 0,1-60 sn (sayı kutusu), en fazla süre (saniye, boş/0 = sınırsız). Işıkta ek olarak: elle aç/kapat, alarmda otomatik yanma. Siren ve ışığın süreleri birbirinden bağımsızdır (siren süresi dolsa da alarm susturulana kadar ışık yanabilir)): panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
 
 Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
 
-## 6a. Otomatik susturma ve susturma sesi (v3.3 alıcı + panel)
-- Panel > Siren ayarları: **"Alarm kendiliğinden susturulsun (saniye)"** kutusu. Boş/0 = kapalı (eski davranış: alarm sen butona basana kadar "susturulmadı" kalır). Süre yazılırsa, alarm butona basılmasa bile o süre sonunda **susturuldu** olur: siren ve ışık durur, `triggered` ve `siren` Firebase'de `false` olur, olay kaydına "Alarm kendiliğinden susturuldu" (`automute`) düşer.
-- Sayaç **alıcı kartında** çalışır (internet/panel olmasa da). Ayarın okunması için alıcının internete bağlı olması gerekir; bir kez okunduktan sonra internet kopsa bile geçerlidir. Her yeni alarm (tekrar çalma açıksa) sayacı baştan başlatır.
-- Siren süre sınırından farkı: siren süre sınırı sadece sireni durdurur, alarm "susturulmadı" kalır. Otomatik susturma alarm durumunun kendisini de kapatır. İkisi bağımsız ayarlanır (otomatik susturma süresi siren süresinden kısaysa siren de o anda durur).
-- **Susturma sesi:** panel, alarm susturulunca (elle veya kendiliğinden) kısa bir "bip-bip" çalar. Kutucuk: "Alarm susturulunca bu cihazda ses çalsın" (varsayılan açık, her telefon/tarayıcı için ayrı, tarayıcı hafızasında). Sayfa açık olmalı; tarayıcı, hiç dokunulmamış sekmede sesi engelleyebilir (ilk dokunuştan sonra çalışır).
-- Sistemi devre dışı bırakmak bip çalmaz (sadece alarm susturulunca çalar).
+## 6a. Otomatik susturma, susturma sesi ve zamanlama (alıcı v3.4 + panel)
+- **Otomatik susturma (ayrı kutu YOK, kullanıcı kaldırttı):** Siren ve ışığın panelde seçilen en fazla süreleri dolunca "Alarmı sustur" kendiliğinden uygulanır. Bekleme süresi = siren süresi ile alarm ışığı süresinden **uzun olanı** (alarm ışığı kapalıysa sadece siren süresi). **Siren süresi boş/0 ise veya alarmda ışık açık ve ışık süresi boş/0 ise otomatik susturma YOKTUR** (buton açık kalır, elle susturulur). Panelde "Alarmı sustur" butonunun altında bu durum yazar.
+- Uygulanınca siren ve ışık durur, `triggered` ve `siren` Firebase'de `false` olur, olay kaydına "Alarm kendiliğinden susturuldu" (`automute`) düşer. Sayaç alıcı kartında çalışır (internet/panel olmasa da). Her yeni alarm (tekrar çalma açıksa) sayacı baştan başlatır. Elle açılan ışık (Işığı aç) susturmadan etkilenmez.
+- **Susturma sesi:** panel, alarm susturulunca (elle veya kendiliğinden) kısa "bip-bip" çalar. Kutucuk (Siren ayarları): "Alarm susturulunca bu cihazda ses çalsın", varsayılan açık, her telefon/tarayıcı için ayrı (tarayıcı hafızası). Sayfa açık olmalı; tarayıcı dokunulmamış sekmede sesi engelleyebilir. Sistemi devre dışı bırakmak bip çalmaz.
+- **Zamanlama (v3.4):** Panel > Zamanlama kartı: "Sadece belirlediğim gün ve saatlerde koru" kutusu, başlangıç/bitiş saati, 7 gün düğmesi. Zamanlama dışındayken alıcı ESP-NOW alarmını yok sayar (siren çalmaz); panel "Zamanlama dışı" gösterir. Başlangıç = bitiş: seçili günlerde 24 saat. Başlangıç > bitiş: gece yarısını geçer (22:00–06:00; gün, aralığın başladığı güne göre seçilir). Saat NTP ile alınır, **Türkiye saati sabit UTC+3**. Saat alınamazsa koruma açık sayılır (güvenli taraf). Ana şalter "Sistemi etkinleştir/devre dışı bırak" butonudur; zamanlama onun içinde çalışır (sistem devre dışıysa zamanlama bir şey değiştirmez). Zamanlama dışına çıkılınca süren bir alarm kendiliğinden kesilmez.
 
 ## 6b. Alıcıda telefondan Wi-Fi kurulumu (v3)
 - **Sıfırlama:** Alıcı ESP32 açıkken kart üzerindeki **BOOT** tuşuna **3 saniye** basılı tut (LED yanar, kart yeniden başlar). Kart açılırken BOOT'a basma (yükleme moduna girer).
@@ -94,7 +93,7 @@ Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod d
 alarm/   armed(bool) siren(bool) triggered(bool) lastTrigger(ms) test(bool) sirenSeconds(sayı)
          sirenRepeat(bool, yoksa true) sirenMode("steady"|"blink") sirenMs(ms, 100-60000) sirenSeconds(sn, 0/boş=susturana kadar, yoksa 60)
          lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 100-60000) lightAlarm(bool, yoksa true) lightSeconds(sn, 0=alarm sürdüğü sürece)
-         autoMuteSeconds(sn, 0/boş=kendiliğinden susturma yok)
+         schedOn(bool) schedStart(dk, gün başından) schedEnd(dk) schedDays(maske, bit0=Pzt..bit6=Paz, yoksa 127)
 status/  alici{lastSeen,rssi,fw}  verici{lastSeen,contact}
 log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeout|light_on|light_off
 ```
@@ -112,7 +111,7 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeo
 - ❌ Bariyer bağlanmadı, siren ve ışık yok
 
 ## 9. Sıradaki adımlar
-0. **Alıcıya v3.3 yükle** (COM3; `alici.ino` + `secrets.h` aynı klasörde) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonuç henüz bildirilmedi.
+0. **Alıcıya v3.4 yükle** (COM3; `alici.ino` + `secrets.h` aynı klasörde) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonuç henüz bildirilmedi.
 1. **Bariyeri vericiye bağla** (kılavuza göre terminaller belli): bariyerin ALICI biriminde ③ COM → verici ESP32 GND, ④ NC → verici D27. Kullanıcı jumper kablonun bir ucunu kesip soyarak vidalı terminale takacak. Verici USB şarj adaptörüyle beslenecek. Önce elektrik kapalı bağlanır.
 2. Panelde "Bariyer ışını: Normal" görünmeli (ışınlar hizalıyken). Ters görünürse NC/NO karışmıştır.
 3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
@@ -124,5 +123,6 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeo
 
 ## 10. Bilinen sınırlar
 - Alıcı internetsizken panel bilgisi güncellenmez; siren yine çalar, siren süre sınırıyla kendiliğinden susar.
-- Siren/alarm, panelden susturmak veya "kendiliğinden susturma" süresi yazmak dışında ancak elektriği keserek susturulur (fiziksel sustur butonu yok).
+- Siren/alarm, panelden susturmak veya siren+ışık sürelerinin dolmasıyla (otomatik susturma) dışında ancak elektriği keserek susturulur (fiziksel sustur butonu yok).
+- Zamanlama saati sabit Türkiye saatidir (UTC+3, yaz/kış saati yok). Alıcı açılışta internetten saati almadan zamanlama uygulayamaz (o sürede koruma açık kalır).
 - ESP-NOW menzili açık alanda yaklaşık 50-100 m.

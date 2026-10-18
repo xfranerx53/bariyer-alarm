@@ -112,6 +112,7 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
 
   <div class="card">
     <button id="mute" class="danger">Sireni sustur</button>
+    <div class="small" id="autoInfo" style="margin-top:6px"></div>
     <button id="arm" class="alt">…</button>
   </div>
 
@@ -120,6 +121,20 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <div class="row"><div><b>Alıcı</b><div class="small" id="aliciInfo">—</div></div><span class="chip na" id="aliciChip">—</span></div>
     <div class="row"><div><b>Verici</b><div class="small" id="vericiInfo">—</div></div><span class="chip na" id="vericiChip">—</span></div>
     <div class="row"><div><b>Bariyer ışını</b><div class="small" id="beamInfo">Vericiden gelen son bilgi</div></div><span class="chip na" id="beamChip">—</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Zamanlama</h2>
+    <label class="small" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="schedOn" style="width:auto;margin:0;padding:0"> Sadece belirlediğim gün ve saatlerde koru</label>
+    <div class="small">Kapalıysa sistem, etkin olduğu sürece her an korur. Açıksa seçtiğin saatler dışında ışın kesilse bile alarm çalmaz. Saatler Türkiye saatidir.</div>
+    <div class="two" style="margin-top:8px">
+      <div><label class="small" for="schedStart">Başlangıç</label><input id="schedStart" type="time" value="00:00"></div>
+      <div><label class="small" for="schedEnd">Bitiş</label><input id="schedEnd" type="time" value="00:00"></div>
+    </div>
+    <div class="small">Başlangıç ve bitiş aynıysa seçili günlerde 24 saat korur. Başlangıç bitişten büyükse gece yarısını geçer (örnek 22:00 – 06:00).</div>
+    <label class="small" style="display:block;margin-top:12px">Günler</label>
+    <div id="days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px"></div>
+    <div class="small" id="schedInfo" style="margin-top:10px"></div>
   </div>
 
   <div class="card">
@@ -137,9 +152,7 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="sirenRepeat" style="width:auto;margin:0;padding:0"> Bariyer tekrar kesilirse siren yeniden çalsın</label>
     <div class="small">Kapalıysa siren bir kez çaldıktan sonra, sen <b>Alarmı sustur</b> diyene kadar tekrar çalmaz. Açıksa her yeni kesintide yeniden çalar.</div>
     <div class="sep"></div>
-    <label class="small" for="autoMuteSec" style="display:block">Alarm kendiliğinden susturulsun (saniye)</label>
-    <input id="autoMuteSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = ben susturana kadar">
-    <div class="small">Butona basmasan bile alarm bu süre sonunda <b>susturuldu</b> olur: siren ve ışık durur, alarm durumu temizlenir, olay kaydına yazılır. Boş veya 0 = kendiliğinden susturma yok. Alıcı kartı yaptığı için internet olmasa da çalışır.</div>
+    <div class="small"><b>Otomatik susturma:</b> Siren ve ışık için yazdığın en fazla süreler dolunca "Alarmı sustur" kendiliğinden uygulanır (ikisinden uzun olanı beklenir). Siren veya alarmdaki ışık süresiz ise otomatik susturma olmaz.</div>
     <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="muteSound" style="width:auto;margin:0;padding:0"> Alarm susturulunca bu cihazda ses çalsın</label>
     <div class="small">Elle veya kendiliğinden susturulunca kısa bir "bip-bip" duyulur. Bu ayar sadece bu telefon/tarayıcı için geçerlidir.</div>
   </div>
@@ -261,7 +274,33 @@ $("sBlink").onclick  = () => setCfg({sirenMode:"blink"});
 $("sirenMs").onchange  = e => intervalChange(e,"sirenMs");
 $("sirenSec").onchange = e => limitChange(e,"sirenSeconds");
 $("sirenRepeat").onchange = e => setCfg({sirenRepeat:e.target.checked});
-$("autoMuteSec").onchange = e => limitChange(e,"autoMuteSeconds");
+
+/* ---------- zamanlama ---------- */
+const DAYN = ["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
+$("days").innerHTML = DAYN.map((n,i)=>`<button type="button" class="alt" data-d="${i}" style="margin:0;padding:10px 0;font-size:.82rem">${n}</button>`).join("");
+$("days").onclick = e => {
+  const b = e.target.closest("button[data-d]"); if(!b) return;
+  const mask = (alarm.schedDays===undefined ? 127 : alarm.schedDays) ^ (1<<(+b.dataset.d));
+  setCfg({schedDays: mask});
+};
+function toMin(v){ const m=/^(\d{1,2}):(\d{2})$/.exec(v||""); return m ? (+m[1])*60+(+m[2]) : 0; }
+function fromMin(n){ n=n||0; return String(Math.floor(n/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0"); }
+$("schedOn").onchange = e => setCfg({schedOn:e.target.checked});
+$("schedStart").onchange = e => setCfg({schedStart:toMin(e.target.value)});
+$("schedEnd").onchange = e => setCfg({schedEnd:toMin(e.target.value)});
+function istNow(){                         // Türkiye saati: {gün 0=Pzt, dakika}
+  const p = new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Istanbul",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(now()));
+  const g = t => p.find(x=>x.type===t).value;
+  return { day:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].indexOf(g("weekday")), min:(+g("hour"))*60+(+g("minute")) };
+}
+function inSchedule(){                     // alıcıdaki hesapla aynı
+  if(!alarm.schedOn) return true;
+  const a=alarm.schedStart||0, b=alarm.schedEnd||0, d=alarm.schedDays===undefined?127:alarm.schedDays;
+  const t=istNow(), prev=(t.day+6)%7;
+  if(a===b) return !!((d>>t.day)&1);
+  if(a<b) return !!((d>>t.day)&1) && t.min>=a && t.min<b;
+  return (!!((d>>t.day)&1) && t.min>=a) || (!!((d>>prev)&1) && t.min<b);
+}
 
 /* susturma sesi: bu cihazın tercihi (tarayıcı hafızasında) */
 function soundOn(){ try{ return localStorage.getItem("muteSound")!=="0"; }catch(_){ return true; } }
@@ -301,10 +340,21 @@ function renderSettings(){
   setVal("sirenMs", (alarm.sirenMs || 1000)/1000);
   const ss = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
   setVal("sirenSec", ss ? ss : "");
-  setVal("autoMuteSec", alarm.autoMuteSeconds ? alarm.autoMuteSeconds : "");
   if(document.activeElement !== $("muteSound")) $("muteSound").checked = soundOn();
   if(document.activeElement !== $("sirenRepeat")) $("sirenRepeat").checked = alarm.sirenRepeat !== false;
 
+  if(document.activeElement !== $("schedOn")) $("schedOn").checked = !!alarm.schedOn;
+  setVal("schedStart", fromMin(alarm.schedStart)); setVal("schedEnd", fromMin(alarm.schedEnd));
+  const dm = alarm.schedDays===undefined ? 127 : alarm.schedDays;
+  [...$("days").children].forEach((b,i)=>{ b.className = (dm>>i)&1 ? "" : "alt"; });
+  [...$("days").children].forEach(b=>b.style.opacity = alarm.schedOn ? 1 : .5);
+  $("schedStart").disabled = $("schedEnd").disabled = !alarm.schedOn;
+  $("schedInfo").textContent = !alarm.schedOn ? "Zamanlama kapalı." : (inSchedule() ? "Şu an koruma saatleri içinde: koruma devrede." : "Şu an koruma saatleri dışında: alarm çalmaz.");
+  const sl = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
+  const ll = alarm.lightAlarm !== false ? (alarm.lightSeconds||0) : -1;   // -1: alarmda ışık yok
+  $("autoInfo").textContent = (sl>0 && ll!==0)
+    ? "Otomatik susturma: alarmdan "+Math.max(sl, ll>0?ll:0)+" sn sonra kendiliğinden susturulur."
+    : "Otomatik susturma kapalı (siren veya alarm ışığı süresi sınırsız).";
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
   $("lightBtn").textContent = on ? "Işığı kapat" : "Işığı aç";
   $("lightBtn").className = on ? "" : "alt";
@@ -351,6 +401,7 @@ function renderHero(){
   if(alarm.siren){ cls="bad"; dot="🚨"; txt="ALARM ÇALIYOR"; }
   else if(alarm.triggered){ cls="bad"; dot="🚨"; txt="Alarm verildi (susturulmadı)"; }
   else if(alarm.armed===false){ cls="off"; dot="⏸"; txt="Devre dışı"; }
+  else if(alarm.armed===true && !inSchedule()){ cls="off"; dot="🕒"; txt="Zamanlama dışı"; }
   else if(alarm.armed===true){ cls="ok"; dot="✓"; txt="Korunuyor"; }
   hero.className="card hero "+cls; $("dot").textContent=dot; $("state").textContent=txt;
   $("last").textContent = alarm.lastTrigger ? "Son alarm: "+ago(alarm.lastTrigger)+" ("+clock(alarm.lastTrigger)+")" : "Henüz alarm yok";
