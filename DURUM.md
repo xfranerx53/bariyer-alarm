@@ -84,9 +84,9 @@ Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod d
 ## 7. Firebase veri yapısı
 ```
 alarm/   armed(bool) siren(bool) triggered(bool) lastTrigger(ms) test(bool) sirenSeconds(sayı)
-         sirenMode("steady"|"blink") sirenMs(ms, 100-60000) sirenSeconds(sn, 0/boş=susturana kadar, yoksa 60)
+         sirenRepeat(bool, yoksa true) sirenMode("steady"|"blink") sirenMs(ms, 100-60000) sirenSeconds(sn, 0/boş=susturana kadar, yoksa 60)
          lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 100-60000) lightAlarm(bool, yoksa true) lightSeconds(sn, 0=alarm sürdüğü sürece)
-status/  alici{lastSeen,rssi}  verici{lastSeen,contact}
+status/  alici{lastSeen,rssi,fw}  verici{lastSeen,contact}
 log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 ```
 `test`, `sirenSeconds`, `status`, `log` ilk kullanımda kendiliğinden oluşur, elle eklemek gerekmez.

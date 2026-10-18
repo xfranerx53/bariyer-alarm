@@ -1,4 +1,4 @@
-// ALICI (ESP32 #2)  |  Sürüm 3
+// ALICI (ESP32 #2)  |  Sürüm 3.2
 // Görevi: vericiden ESP-NOW ile alarm almak, siren rölesini çekmek,
 // Firebase'e bildirmek, panelden gelen komutları (sustur, test, süre, devre dışı) uygulamak.
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
@@ -17,6 +17,7 @@
 #include "secrets.h"
 
 const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
+const char* FW = "3.2";                 // yazılım sürümü (panelde görünür)
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
@@ -53,6 +54,9 @@ unsigned long lastStatus = 0, lastMacPrint = 0;
 volatile int sirenSeconds = 60;      // panelden ayarlanır, 0 = susturana kadar
 
 // Siren ve ışık ayarları (ikisi birbirinden bağımsız, panelden gelir)
+volatile bool sirenRepeat = true;        // bariyer tekrar kesilirse siren yeniden çalsın (panelden)
+volatile unsigned long rxAlarms = 0;     // vericiden alınan toplam alarm mesajı sayısı
+volatile unsigned long ignoredAlarms = 0;// 'tekrar çalma' kapalıyken yok sayılan alarmlar
 volatile bool alarmActive = false;       // alarm verildi ve henüz susturulmadı (siren süresi dolsa da sürer)
 volatile bool sirenBlink = false;        // false = sürekli, true = aralıklı
 volatile unsigned long sirenMs = 1000;   // aralıklı modda çalma/susma süresi (ms)
@@ -71,7 +75,11 @@ void handleMsg(const uint8_t* data, int len) {
   Msg m; memcpy(&m, data, sizeof(m));
   if (m.magic != MAGIC) return;
   if (m.type == T_ALARM) {
-    if (armed) { sirenOn = true; alarmActive = true; fbPending = true; }
+    rxAlarms++;
+    if (armed) {
+      if (!alarmActive || sirenRepeat) { sirenOn = true; alarmActive = true; fbPending = true; }
+      else ignoredAlarms++;     // aynı alarm içinde tekrar kesinti: siren yeniden çalmaz
+    }
   } else if (m.type == T_BEAT) {
     vContact = m.contact; vSeen = true;
   }
@@ -311,6 +319,7 @@ void setup() {
   xTaskCreate(uiTask, "ui", 4096, NULL, 1, NULL);
   xTaskCreate(outputTask, "out", 3072, NULL, 1, NULL);
 
+  Serial.printf("ALICI yazilim v%s\n", FW);
   Serial.print("ALICI MAC: ");
   Serial.println(WiFi.macAddress());
 
@@ -355,7 +364,7 @@ void loop() {
   if (idToken != "") {
     // 1) Bekleyen alarmı Firebase'e bildir
     if (fbPending) {
-      Serial.println("ESP-NOW ALARM! Firebase'e yaziliyor");
+      Serial.printf("ESP-NOW ALARM! Firebase'e yaziliyor (alinan toplam: %lu, yok sayilan: %lu)\n", rxAlarms, ignoredAlarms);
       if (dbPatch("/alarm", "{\"triggered\":true,\"siren\":true,\"lastTrigger\":{\".sv\":\"timestamp\"}}")) {
         fbPending = false;
         logEvent("alarm", "verici");
@@ -372,6 +381,7 @@ void loop() {
       bool fbSiren = r.indexOf("\"siren\":true") >= 0;
       int i = r.indexOf("\"sirenSeconds\":");
       sirenSeconds = (i >= 0) ? r.substring(i + 15).toInt() : 60;
+      sirenRepeat = r.indexOf("\"sirenRepeat\":false") < 0;
       sirenBlink = r.indexOf("\"sirenMode\":\"blink\"") >= 0;
       int k = r.indexOf("\"sirenMs\":");
       long sms = (k >= 0) ? r.substring(k + 10).toInt() : 1000;
@@ -400,7 +410,7 @@ void loop() {
     }
     // 4) Cihaz durumunu panele bildir (20 sn'de bir)
     if (lastStatus == 0 || millis() - lastStatus > 20000) {
-      String j = String("{\"alici\":{\"lastSeen\":{\".sv\":\"timestamp\"},\"rssi\":") + WiFi.RSSI() + "}";
+      String j = String("{\"alici\":{\"lastSeen\":{\".sv\":\"timestamp\"},\"rssi\":") + WiFi.RSSI() + ",\"fw\":\"" + FW + "\"}";
       if (vSeen) {
         vSeen = false;
         j += String(",\"verici\":{\"lastSeen\":{\".sv\":\"timestamp\"},\"contact\":") + (vContact ? "true" : "false") + "}";

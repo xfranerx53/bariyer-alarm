@@ -134,6 +134,8 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <label class="small" for="sirenSec" style="display:block;margin-top:12px">Siren en fazla ne kadar çalsın? (saniye)</label>
     <input id="sirenSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = ben susturana kadar">
     <div class="small">Boş bırakırsan veya 0 yazarsan siren sen susturana kadar çalar.</div>
+    <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="sirenRepeat" style="width:auto;margin:0;padding:0"> Bariyer tekrar kesilirse siren yeniden çalsın</label>
+    <div class="small">Kapalıysa siren bir kez çaldıktan sonra, sen <b>Alarmı sustur</b> diyene kadar tekrar çalmaz. Açıksa her yeni kesintide yeniden çalar.</div>
   </div>
 
   <div class="card">
@@ -252,6 +254,7 @@ $("sSteady").onclick = () => setCfg({sirenMode:"steady"});
 $("sBlink").onclick  = () => setCfg({sirenMode:"blink"});
 $("sirenMs").onchange  = e => intervalChange(e,"sirenMs");
 $("sirenSec").onchange = e => limitChange(e,"sirenSeconds");
+$("sirenRepeat").onchange = e => setCfg({sirenRepeat:e.target.checked});
 
 $("lightBtn").onclick = async () => {
   const on = !alarm.lightOn;
@@ -272,6 +275,7 @@ function renderSettings(){
   setVal("sirenMs", (alarm.sirenMs || 1000)/1000);
   const ss = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
   setVal("sirenSec", ss ? ss : "");
+  if(document.activeElement !== $("sirenRepeat")) $("sirenRepeat").checked = alarm.sirenRepeat !== false;
 
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
   $("lightBtn").textContent = on ? "Işığı kapat" : "Işığı aç";
@@ -336,7 +340,7 @@ function renderDevices(){
   if(a && a.lastSeen){
     const on = now()-a.lastSeen < ONLINE;
     setChip("aliciChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı");
-    $("aliciInfo").textContent = ago(a.lastSeen) + (a.rssi ? " · Wi-Fi sinyal "+a.rssi+" dBm" : "");
+    $("aliciInfo").textContent = ago(a.lastSeen) + (a.rssi ? " · Wi-Fi sinyal "+a.rssi+" dBm" : "") + (a.fw ? " · yazılım v"+a.fw : " · eski yazılım");
   }else{ setChip("aliciChip","na","Bilgi yok"); $("aliciInfo").textContent="Henüz bilgi gelmedi"; }
 
   if(v && v.lastSeen){
