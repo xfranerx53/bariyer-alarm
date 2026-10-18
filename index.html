@@ -310,7 +310,6 @@ async function act(type, updates){
 }
 $("mute").onclick = async () => { if(await act("mute",{siren:false,triggered:false})) toast("Alarm susturuldu"); };
 async function armSet(on){
-  if(!on && !confirm("Güvenliği kapatmak istediğine emin misin? Işın kesilse bile alarm çalmaz.")) return;
   if(await act(on?"arm":"disarm",{armed:on,siren:false,triggered:false})) toast(on?"Güvenlik açıldı":"Güvenlik kapatıldı");
 }
 $("armOn").onclick  = () => alarm.armed===true ? toast("Güvenlik zaten açık") : armSet(true);

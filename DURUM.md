@@ -76,7 +76,7 @@ v2 özellikleri (v3 ile panele **ayrı Siren ve Işık ayar kartları** eklendi.
 
 Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
 
-Panel düzeni: üstte durum, büyük "Alarmı sustur" butonu, iki büyük "Güvenlik açık / Güvenlik kapalı" düğmesi (seçili olan dolu: açık = yeşil, kapalı = kırmızı; kapatırken onay sorar) ve cihazlar; altta **Ayarlar** başlığı altında açılır/kapanır bölümler (Alarmı susturma, Siren, Işık, Zamanlama, Bildirim), en altta Son olaylar. Her bölümün başlığında güncel ayar özeti görünür.
+Panel düzeni: üstte durum, büyük "Alarmı sustur" butonu, iki büyük "Güvenlik açık / Güvenlik kapalı" düğmesi (seçili olan dolu: açık = yeşil, kapalı = kırmızı; kapatırken onay sormaz, kullanıcı istemedi) ve cihazlar; altta **Ayarlar** başlığı altında açılır/kapanır bölümler (Alarmı susturma, Siren, Işık, Zamanlama, Bildirim), en altta Son olaylar. Her bölümün başlığında güncel ayar özeti görünür.
 
 ## 6a. Otomatik susturma, susturma sesi ve zamanlama (alıcı v3.6 + panel)
 - **Otomatik susturma (alıcı v3.5):** Panel > Ayarlar > "Alarmı susturma": "Otomatik susturma açık" kutusu + **"Kaç saniye sonra kendiliğinden susturulsun?"** kutusu (kullanıcı kendi istediği saniyeyi yazar, örnek 30). **Süre yazılırsa** alarmdan o kadar saniye sonra "Alarmı sustur" kendiliğinden uygulanır. **Boş/0 ise** siren süresi ile alarm ışığı süresinden uzun olanı beklenir; siren süresi boş/0 ise veya alarmda ışık açıkken ışık süresi boş/0 ise otomatik susturma YOKTUR. Kutu kapatılırsa hiç susturulmaz (elle). "Alarmı sustur" butonunun altında geçerli süre yazar.
