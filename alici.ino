@@ -137,7 +137,7 @@ void lightTask(void*) {
     bool want = lightManual || (lightWithAlarm && alarmNow);
     bool out = want;
     if (want && lightBlink) {
-      unsigned long ms = lightMs < 200 ? 200 : lightMs;
+      unsigned long ms = lightMs < 100 ? 100 : lightMs;
       out = ((millis() / ms) % 2) == 0;
     }
     relay(LIGHT_PIN, out);
@@ -368,7 +368,7 @@ void loop() {
       lightWithAlarm = r.indexOf("\"lightAlarm\":false") < 0;
       int j = r.indexOf("\"lightMs\":");
       long lms = (j >= 0) ? r.substring(j + 10).toInt() : 1000;
-      if (lms < 200) lms = 200;
+      if (lms < 100) lms = 100;
       if (lms > 60000) lms = 60000;
       lightMs = lms;
       if (r.indexOf("\"test\":true") >= 0) {

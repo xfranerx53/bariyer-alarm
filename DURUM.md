@@ -69,7 +69,7 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 | Alıcı kodu | `alici/alici.ino` | **v3 hazır, henüz yüklenmedi** (telefondan Wi-Fi kurulumu + ışık kontrolü eklendi). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
 | Verici kodu | `verici/verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
-v2 özellikleri (v3 ile panele **Işık kontrolü** de eklendi: aç/kapat, Sürekli/Aralıklı mod, aralık süresi 0,5-10 sn, alarmda otomatik yanma): panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
+v2 özellikleri (v3 ile panele **Işık kontrolü** de eklendi: aç/kapat, Sürekli/Aralıklı mod, aralık süresi 0,1-60 sn (sayı kutusu, 0,1 sn adım), alarmda otomatik yanma): panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
 
 Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
 
@@ -84,7 +84,7 @@ Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod d
 ## 7. Firebase veri yapısı
 ```
 alarm/   armed(bool) siren(bool) triggered(bool) lastTrigger(ms) test(bool) sirenSeconds(sayı)
-         lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 200-60000) lightAlarm(bool, yoksa true)
+         lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 100-60000) lightAlarm(bool, yoksa true)
 status/  alici{lastSeen,rssi}  verici{lastSeen,contact}
 log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 ```

@@ -140,16 +140,9 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <button id="lightBtn" class="alt">Işığı aç</button>
     <label class="small" style="display:block;margin-top:12px">Çalışma şekli</label>
     <div class="two"><button id="mSteady" class="alt">Sürekli</button><button id="mBlink" class="alt">Aralıklı</button></div>
-    <label class="small" for="lightMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi</label>
-    <select id="lightMs">
-      <option value="500">0,5 saniye</option>
-      <option value="1000">1 saniye</option>
-      <option value="2000">2 saniye</option>
-      <option value="3000">3 saniye</option>
-      <option value="5000">5 saniye</option>
-      <option value="10000">10 saniye</option>
-    </select>
-    <div class="small">Aralıklı modda ışık seçtiğin süre kadar yanar, aynı süre kadar söner.</div>
+    <label class="small" for="lightMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi (saniye, en az 0,1)</label>
+    <input id="lightMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1" placeholder="saniye">
+    <div class="small">Işık yazdığın süre kadar yanar, aynı süre kadar söner. Örnek: 0,1 / 0,5 / 1 / 2,5. En fazla 60 saniye. Çok kısa süreler rölenin tık sesini sıklaştırır ve rölenin ömrünü kısaltır.</div>
     <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="lightAlarm" style="width:auto;margin:0;padding:0"> Alarm olunca ışık kendiliğinden yansın</label>
     <div class="sep"></div>
     <button class="alt" id="notif">Bildirimleri aç</button>
@@ -239,7 +232,13 @@ $("lightBtn").onclick = async () => {
 };
 $("mSteady").onclick = () => setLight({lightMode:"steady"});
 $("mBlink").onclick  = () => setLight({lightMode:"blink"});
-$("lightMs").onchange = e => setLight({lightMs:Number(e.target.value)});
+$("lightMs").onchange = e => {
+  const v = parseFloat(String(e.target.value).replace(",", "."));
+  if(!isFinite(v) || v < 0.1){ toast("En az 0,1 saniye olmalı"); e.target.value = (alarm.lightMs||1000)/1000; return; }
+  const ms = Math.round(Math.min(v, 60) * 10) * 100;   // 0,1 sn adımlarla, en fazla 60 sn
+  e.target.value = ms/1000;
+  setLight({lightMs: ms});
+};
 $("lightAlarm").onchange = e => setLight({lightAlarm:e.target.checked});
 function renderLight(){
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
@@ -248,7 +247,7 @@ function renderLight(){
   $("mBlink").className = blink ? "" : "alt";
   $("mSteady").className = blink ? "alt" : "";
   $("lightMs").disabled = !blink;
-  if(document.activeElement !== $("lightMs")) $("lightMs").value = String(alarm.lightMs || 1000);
+  if(document.activeElement !== $("lightMs")) $("lightMs").value = String((alarm.lightMs || 1000) / 1000);
   if(document.activeElement !== $("lightAlarm")) $("lightAlarm").checked = alarm.lightAlarm !== false;
 }
 
