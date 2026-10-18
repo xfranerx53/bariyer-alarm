@@ -66,10 +66,10 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 | Parça | Dosya | Durum |
 |---|---|---|
 | Panel (web) | `index.html` | **v2 yayında ve çalışıyor** (kullanıcının ekran görüntüsüyle doğrulandı). Küçük düzeltme: siren süre listesi açıkken kendiliğinden sıfırlanmıyor (bu sürümde, GitHub'a yüklenmesi gerek). |
-| Alıcı kodu | `alici/alici.ino` | **v3 hazır, henüz yüklenmedi** (telefondan Wi-Fi kurulumu eklendi). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
+| Alıcı kodu | `alici/alici.ino` | **v3 hazır, henüz yüklenmedi** (telefondan Wi-Fi kurulumu + ışık kontrolü eklendi). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
 | Verici kodu | `verici/verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
-v2 özellikleri: panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
+v2 özellikleri (v3 ile panele **Işık kontrolü** de eklendi: aç/kapat, Sürekli/Aralıklı mod, aralık süresi 0,5-10 sn, alarmda otomatik yanma): panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
 
 Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
 
@@ -84,6 +84,7 @@ Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod d
 ## 7. Firebase veri yapısı
 ```
 alarm/   armed(bool) siren(bool) triggered(bool) lastTrigger(ms) test(bool) sirenSeconds(sayı)
+         lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 200-60000) lightAlarm(bool, yoksa true)
 status/  alici{lastSeen,rssi}  verici{lastSeen,contact}
 log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 ```
@@ -107,7 +108,7 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
 4. Çift ışınlı bariyerde tek ışın mı yoksa iki ışın birlikte mi alarm veriyor, kılavuzdan/denemeyle öğren.
 5. Siren (12V DC) geldiğinde röle kanal 1'e bağla: 12V(+)→COM, NO→siren(+), siren(−)→12V(−).
-6. **Işık ekle:** alıcıda D25/IN2 rölesi, panelden açma/kapama ve alarmda yanma. Henüz yazılmadı.
+6. **Işık:** yazılımı hazır (alıcı v3 + panel): röle kanal 2 (IN2→D25), panelden aç/kapat, sürekli/aralıklı, aralık süresi, alarmda otomatik yanma. Donanım: 12V(+)→Röle2 COM, Röle2 NO→ışık(+), ışık(−)→12V(−). Kullanıcı ışığı şu an test ediyor; sonucu henüz bildirilmedi. İstenirse **sirene de aynı aralıklı (kesik kesik) modu** eklenebilir (şimdilik sadece ışıkta var).
 7. Sahaya kurulum: su geçirmez kutu, güç, Wi-Fi sinyali (alıcı şu an -68 dBm, orta), bariyer hizalaması.
 8. Güvenlik: ESP şifresi ve Wi-Fi şifresi değiştirilecek (kullanıcı kendisi yapacak).
 

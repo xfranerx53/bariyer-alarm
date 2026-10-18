@@ -4,7 +4,8 @@
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
 //            kart "Bariyer-Alici-Kurulum" adında kendi Wi-Fi ağını açar, telefondan bağlanıp
 //            yeni Wi-Fi bilgisi girilir.
-// Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık, henüz kullanılmıyor), VCC -> VIN, GND -> GND
+// Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
+// Işık: panelden aç/kapat, sürekli veya aralıklı (yanıp sönme), alarmda otomatik yanma.
 // Wi-Fi ve ESP şifresi aynı klasördeki secrets.h dosyasındadır (ilk açılışta kullanılır).
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -19,7 +20,7 @@ const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
-const int LIGHT_PIN = 25;       // Işık adımında kullanılacak
+const int LIGHT_PIN = 25;       // Işık rölesi (IN2)
 const bool ACTIVE_LOW = true;   // Röle LOW'da çekiyorsa true
 const int BTN_PIN = 0;          // Kart üzerindeki BOOT tuşu
 const int LED_PIN = 2;          // Kart üzerindeki mavi LED (varsa)
@@ -51,6 +52,12 @@ volatile unsigned long testUntil = 0;
 bool wasOn = false;
 unsigned long sirenStart = 0, lastStatus = 0, lastMacPrint = 0;
 int sirenSeconds = 60;               // panelden ayarlanır, 0 = susturana kadar
+
+// Işık (röle kanal 2, D25) ayarları: panelden gelir
+volatile bool lightManual = false;       // panelden "Işığı aç"
+volatile bool lightBlink = false;        // false = sürekli, true = aralıklı
+volatile bool lightWithAlarm = true;     // alarmda ışık kendiliğinden yansın
+volatile unsigned long lightMs = 1000;   // aralıklı modda yanma/sönme süresi (ms)
 
 // ---------------------------------------------------------------- röle
 void relay(int pin, bool on) { digitalWrite(pin, (on != ACTIVE_LOW) ? HIGH : LOW); }
@@ -120,6 +127,21 @@ void uiTask(void*) {
       } else digitalWrite(LED_PIN, LOW);
     }
     vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+}
+
+// Işığı ayrı bir görev yönetir: ağ işlemleri sırasında bile yanıp sönme düzgün kalır
+void lightTask(void*) {
+  for (;;) {
+    bool alarmNow = sirenOn || ((long)(testUntil - millis()) > 0);
+    bool want = lightManual || (lightWithAlarm && alarmNow);
+    bool out = want;
+    if (want && lightBlink) {
+      unsigned long ms = lightMs < 200 ? 200 : lightMs;
+      out = ((millis() / ms) % 2) == 0;
+    }
+    relay(LIGHT_PIN, out);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 }
 
@@ -264,6 +286,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
   initEspNow();
   xTaskCreate(uiTask, "ui", 4096, NULL, 1, NULL);
+  xTaskCreate(lightTask, "light", 2048, NULL, 1, NULL);
 
   Serial.print("ALICI MAC: ");
   Serial.println(WiFi.macAddress());
@@ -340,6 +363,14 @@ void loop() {
       bool fbSiren = r.indexOf("\"siren\":true") >= 0;
       int i = r.indexOf("\"sirenSeconds\":");
       sirenSeconds = (i >= 0) ? r.substring(i + 15).toInt() : 60;
+      lightManual = r.indexOf("\"lightOn\":true") >= 0;
+      lightBlink = r.indexOf("\"lightMode\":\"blink\"") >= 0;
+      lightWithAlarm = r.indexOf("\"lightAlarm\":false") < 0;
+      int j = r.indexOf("\"lightMs\":");
+      long lms = (j >= 0) ? r.substring(j + 10).toInt() : 1000;
+      if (lms < 200) lms = 200;
+      if (lms > 60000) lms = 60000;
+      lightMs = lms;
       if (r.indexOf("\"test\":true") >= 0) {
         testUntil = millis() + 3000;
         Serial.println("PANEL TESTI: siren 3 sn");

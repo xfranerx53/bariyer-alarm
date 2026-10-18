@@ -59,6 +59,7 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
 .chip.bad{background:var(--badbg);color:var(--bad)}
 .chip.warn{background:var(--warnbg);color:var(--warn)}
 .chip.na{background:var(--soft);color:var(--mute)}
+.sep{border-top:1px solid var(--line);margin:18px 0 14px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 
 /* log */
@@ -134,6 +135,23 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
       <option value="600">10 dakika</option>
       <option value="0">Ben susturana kadar</option>
     </select>
+    <div class="sep"></div>
+    <h2>Işık kontrolü</h2>
+    <button id="lightBtn" class="alt">Işığı aç</button>
+    <label class="small" style="display:block;margin-top:12px">Çalışma şekli</label>
+    <div class="two"><button id="mSteady" class="alt">Sürekli</button><button id="mBlink" class="alt">Aralıklı</button></div>
+    <label class="small" for="lightMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi</label>
+    <select id="lightMs">
+      <option value="500">0,5 saniye</option>
+      <option value="1000">1 saniye</option>
+      <option value="2000">2 saniye</option>
+      <option value="3000">3 saniye</option>
+      <option value="5000">5 saniye</option>
+      <option value="10000">10 saniye</option>
+    </select>
+    <div class="small">Aralıklı modda ışık seçtiğin süre kadar yanar, aynı süre kadar söner.</div>
+    <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="lightAlarm" style="width:auto;margin:0;padding:0"> Alarm olunca ışık kendiliğinden yansın</label>
+    <div class="sep"></div>
     <button class="alt" id="notif">Bildirimleri aç</button>
     <div class="small" style="margin-top:8px">Bildirim sadece bu sayfa açıkken gelir (sekme arka planda olabilir).</div>
   </div>
@@ -210,6 +228,30 @@ $("notif").onclick = async () => {
   toast(p==="granted" ? "Bildirimler açık" : "Bildirim izni verilmedi");
 };
 
+/* ---------- ışık ---------- */
+async function setLight(u){
+  try{ await update(ref(db,"alarm"),u); toast("Kaydedildi"); }
+  catch(_){ toast("Kaydedilemedi"); }
+}
+$("lightBtn").onclick = async () => {
+  const on = !alarm.lightOn;
+  if(await act(on?"light_on":"light_off",{lightOn:on})) toast(on?"Işık açıldı":"Işık kapatıldı");
+};
+$("mSteady").onclick = () => setLight({lightMode:"steady"});
+$("mBlink").onclick  = () => setLight({lightMode:"blink"});
+$("lightMs").onchange = e => setLight({lightMs:Number(e.target.value)});
+$("lightAlarm").onchange = e => setLight({lightAlarm:e.target.checked});
+function renderLight(){
+  const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
+  $("lightBtn").textContent = on ? "Işığı kapat" : "Işığı aç";
+  $("lightBtn").className = on ? "" : "alt";
+  $("mBlink").className = blink ? "" : "alt";
+  $("mSteady").className = blink ? "alt" : "";
+  $("lightMs").disabled = !blink;
+  if(document.activeElement !== $("lightMs")) $("lightMs").value = String(alarm.lightMs || 1000);
+  if(document.activeElement !== $("lightAlarm")) $("lightAlarm").checked = alarm.lightAlarm !== false;
+}
+
 /* ---------- giriş ---------- */
 $("go").onclick = async () => {
   $("err").textContent = "";
@@ -254,6 +296,7 @@ function renderHero(){
   if(document.activeElement !== $("dur")){   // kullanıcı listeyi açıkken değeri bozma
     $("dur").value = String(alarm.sirenSeconds !== undefined ? alarm.sirenSeconds : 60);
   }
+  renderLight();
 }
 
 function renderDevices(){
@@ -282,7 +325,8 @@ function renderDevices(){
 
 const LABEL = {
   alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Siren susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
-  disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"]
+  disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"],
+  light_on:["💡","Işık açıldı"], light_off:["🌑","Işık kapatıldı"]
 };
 const WHO = { verici:"Bariyer", alici:"Alıcı" };
 function renderLog(){
