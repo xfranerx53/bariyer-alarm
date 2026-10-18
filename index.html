@@ -32,6 +32,10 @@ input,select{width:100%;padding:13px;margin:6px 0;border:1px solid var(--line);b
 button{width:100%;padding:14px;border:0;border-radius:12px;background:var(--btn);color:var(--btnink);font-size:1rem;font-weight:650;margin-top:8px;font-family:inherit;cursor:pointer}
 button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
 button.danger{background:var(--bad);color:#fff}
+button.big{min-height:68px;padding:18px 12px;font-size:1.2rem;border-radius:16px;line-height:1.15}
+button.on-green{background:#1f7a4d;color:#fff;border:2px solid #1f7a4d}
+button.on-red{background:#c62828;color:#fff;border:2px solid #c62828}
+button.off-state{background:transparent;color:var(--mute);border:2px solid var(--line);font-weight:600}
 button:disabled{opacity:.4;cursor:not-allowed}
 button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size:.9rem;margin-top:10px;text-decoration:underline;padding:6px}
 .small{color:var(--mute);font-size:.85rem}
@@ -124,9 +128,12 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
   </div>
 
   <div class="card">
-    <button id="mute" class="danger" style="margin-top:0">Sireni sustur</button>
+    <button id="mute" class="danger big" style="margin-top:0">Sireni sustur</button>
     <div class="small" id="autoInfo" style="margin:6px 2px 0"></div>
-    <button id="arm" class="alt">…</button>
+    <div class="two" style="margin-top:10px">
+      <button id="armOn" class="big off-state" style="margin:0">🛡️ Güvenlik açık</button>
+      <button id="armOff" class="big off-state" style="margin:0">🔓 Güvenlik kapalı</button>
+    </div>
   </div>
 
   <div class="card">
@@ -302,11 +309,12 @@ async function act(type, updates){
   }catch(e){ toast("İşlem başarısız. Bağlantını kontrol et."); return false; }
 }
 $("mute").onclick = async () => { if(await act("mute",{siren:false,triggered:false})) toast("Alarm susturuldu"); };
-$("arm").onclick = async () => {
-  if(alarm.armed && !confirm("Sistemi devre dışı bırakmak istediğine emin misin? Işın kesilse bile alarm çalmaz.")) return;
-  const on = !alarm.armed;
-  if(await act(on?"arm":"disarm",{armed:on,siren:false,triggered:false})) toast(on?"Sistem etkin":"Sistem devre dışı");
-};
+async function armSet(on){
+  if(!on && !confirm("Güvenliği kapatmak istediğine emin misin? Işın kesilse bile alarm çalmaz.")) return;
+  if(await act(on?"arm":"disarm",{armed:on,siren:false,triggered:false})) toast(on?"Güvenlik açıldı":"Güvenlik kapatıldı");
+}
+$("armOn").onclick  = () => alarm.armed===true ? toast("Güvenlik zaten açık") : armSet(true);
+$("armOff").onclick = () => alarm.armed!==true ? toast("Güvenlik zaten kapalı") : armSet(false);
 $("test").onclick = async () => {
   if(await act("test",{test:true})) toast("Test komutu gönderildi");
 };
@@ -531,7 +539,7 @@ function renderHero(){
   let cls="off", dot="…", txt="Yükleniyor";
   if(alarm.siren){ cls="bad"; dot="🚨"; txt="ALARM ÇALIYOR"; }
   else if(alarm.triggered){ cls="bad"; dot="🚨"; txt="Alarm verildi (susturulmadı)"; }
-  else if(alarm.armed===false){ cls="off"; dot="⏸"; txt="Devre dışı"; }
+  else if(alarm.armed===false){ cls="off"; dot="⏸"; txt="Güvenlik kapalı"; }
   else if(alarm.armed===true && !inSchedule()){ cls="off"; dot="🕒"; txt="Zamanlama dışı"; }
   else if(alarm.armed===true){ cls="ok"; dot="✓"; txt="Korunuyor"; }
   hero.className="card hero "+cls; $("dot").textContent=dot; $("state").textContent=txt;
@@ -540,7 +548,9 @@ function renderHero(){
   const active = !!(alarm.siren || alarm.triggered);
   $("mute").disabled = !active;
   $("mute").textContent = active ? "Alarmı sustur" : "Alarm yok";
-  $("arm").textContent = alarm.armed ? "Sistemi devre dışı bırak" : "Sistemi etkinleştir";
+  const isOn = alarm.armed === true;
+  $("armOn").className  = "big " + (isOn ? "on-green" : "off-state");
+  $("armOff").className = "big " + (isOn ? "off-state" : "on-red");
   renderSettings();
 }
 
@@ -569,8 +579,8 @@ function renderDevices(){
 }
 
 const LABEL = {
-  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Alarm susturuldu"], automute:["🔇","Alarm kendiliğinden susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
-  disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"],
+  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Alarm susturuldu"], automute:["🔇","Alarm kendiliğinden susturuldu"], arm:["🟢","Güvenlik açıldı"],
+  disarm:["🔓","Güvenlik kapatıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"],
   boot:["🔌","Alıcı açıldı"], verici_offline:["⚠️","Verici görünmüyor",true], verici_online:["✅","Verici yeniden bağlandı"],
   beam_stuck:["⚠️","Işın uzun süredir kesik",true], light_on:["💡","Işık açıldı"], light_off:["🌑","Işık kapatıldı"]
 };
