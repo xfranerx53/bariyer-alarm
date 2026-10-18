@@ -1,4 +1,4 @@
-// ALICI (ESP32 #2)  |  Sürüm 3.5
+// ALICI (ESP32 #2)  |  Sürüm 3.6
 // Görevi: vericiden ESP-NOW ile alarm almak, siren rölesini çekmek,
 // Firebase'e bildirmek, panelden gelen komutları (sustur, test, süre, devre dışı) uygulamak.
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
@@ -9,6 +9,9 @@
 //            alarm ışığı sürelerinden uzun olanı beklenir; biri süresizse otomatik susturma yoktur.
 // YENİ (v3.4): Zamanlama. Panelden seçilen saat aralığı ve günlerde koruma devrededir, dışında alarm vermez.
 //            Saat NTP ile alınır (Türkiye saati, UTC+3). Saat alınamazsa güvenli tarafta kalır: koruma açık.
+// YENİ (v3.6): Telegram bildirimi (alarm, verici çevrimdışı, ışın uzun süre kesik, kart açıldı, susturuldu),
+//            düğmeyle sustur (BOOT tuşuna kısa bas veya D14 - GND arasına düğme), nabız (healthchecks) adresi.
+//            Telegram ve nabız bilgisi Firebase'deki /secret altından okunur (panelden girilir, repoda yok).
 // Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
 // Siren ve ışık ayrı ayrı ayarlanır: sürekli/aralıklı, aralık süresi, en fazla süre (panelden).
 // Wi-Fi ve ESP şifresi aynı klasördeki secrets.h dosyasındadır (ilk açılışta kullanılır).
@@ -20,10 +23,11 @@
 #include <Preferences.h>
 #include <esp_now.h>
 #include <time.h>
+#include <esp_system.h>
 #include "secrets.h"
 
 const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
-const char* FW = "3.5";                 // yazılım sürümü (panelde görünür)
+const char* FW = "3.6";                 // yazılım sürümü (panelde görünür)
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
@@ -31,6 +35,7 @@ const int LIGHT_PIN = 25;       // Işık rölesi (IN2)
 const bool ACTIVE_LOW = true;   // Röle LOW'da çekiyorsa true
 const int BTN_PIN = 0;          // Kart üzerindeki BOOT tuşu
 const int LED_PIN = 2;          // Kart üzerindeki mavi LED (varsa)
+const int MUTE_PIN = 14;        // Susturma düğmesi: bir ucu D14, diğer ucu GND (isteğe bağlı)
 
 const char* AP_NAME = "Bariyer-Alici-Kurulum";
 
@@ -60,6 +65,20 @@ unsigned long lastStatus = 0, lastMacPrint = 0;
 volatile int sirenSeconds = 60;      // panelden ayarlanır, 0 = susturana kadar
 volatile bool autoMuteOn = true;      // otomatik susturma açık mı (panelden)
 volatile int autoMuteSeconds = 0;    // otomatik susturma süresi, 0 = siren/ışık sürelerine göre (panelden)
+// Bildirim ve izleme
+String tgToken = "", tgChat = "", pingUrl = "";
+bool secretsLoaded = false, bootPending = true;
+const int TG_Q = 6;
+String tgQueue[TG_Q];
+int tgCount = 0, tgFails = 0;
+volatile unsigned long lastBeatMs = 0;       // vericiden son kalp atışı
+volatile unsigned long contactSince = 0;     // ışın kesik görünmeye başladığı an (0 = sağlam)
+volatile bool alarmNotifyPending = false;    // alarm geldi, Telegram'a haber verilecek
+volatile uint8_t muteKind = 0;               // 0 = otomatik susturma, 1 = düğme
+volatile int beamWarnMin = 10;               // ışın bu kadar dakika kesik kalırsa uyar, 0 = kapalı
+bool vOffNotified = false, beamNotified = false;
+bool evBoot = false, evVerOff = false, evVerOn = false, evBeam = false;   // Firebase olay kaydı bekleyenler
+unsigned long lastSecretRead = 0, lastPing = 0, lastAlarmTg = 0;
 volatile bool schedOn = false;       // zamanlama açık mı (panelden)
 volatile int schedStartMin = 0;      // koruma başlangıcı (gün başından dakika)
 volatile int schedEndMin = 0;        // koruma bitişi (başlangıçla aynıysa 24 saat)
@@ -106,12 +125,15 @@ void handleMsg(const uint8_t* data, int len) {
   if (m.magic != MAGIC) return;
   if (m.type == T_ALARM) {
     rxAlarms++;
+    if (!contactSince) contactSince = millis();
     if (armed && schedActiveNow) {
-      if (!alarmActive || sirenRepeat) { sirenOn = true; alarmActive = true; fbPending = true; alarmSeq++; }
+      if (!alarmActive || sirenRepeat) { sirenOn = true; alarmActive = true; fbPending = true; alarmSeq++; alarmNotifyPending = true; }
       else ignoredAlarms++;     // aynı alarm içinde tekrar kesinti: siren yeniden çalmaz
     }
   } else if (m.type == T_BEAT) {
     vContact = m.contact; vSeen = true;
+    lastBeatMs = millis();
+    if (m.contact) { if (!contactSince) contactSince = millis(); } else contactSince = 0;
   }
 }
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -123,6 +145,81 @@ void initEspNow() {
   esp_now_deinit();
   if (esp_now_init() != ESP_OK) { Serial.println("ESP-NOW baslatilamadi!"); return; }
   esp_now_register_recv_cb(onRecv);
+}
+
+// ---------------------------------------------------------------- bildirim (Telegram) ve düğme
+String nowStr() {
+  time_t t = time(nullptr);
+  if (t < 1700000000) return "";
+  struct tm tmv; localtime_r(&t, &tmv);
+  char b[24]; strftime(b, sizeof(b), "%d.%m %H:%M", &tmv);
+  return String(b);
+}
+
+String urlEnc(const String& s) {
+  String o; o.reserve(s.length() * 3);
+  const char* hex = "0123456789ABCDEF";
+  for (size_t i = 0; i < s.length(); i++) {
+    uint8_t c = (uint8_t)s[i];
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') o += (char)c;
+    else { o += '%'; o += hex[c >> 4]; o += hex[c & 15]; }
+  }
+  return o;
+}
+
+String jstr(const String& r, const char* key) {       // {"anahtar":"değer"} içinden değeri al
+  String k = String("\"") + key + "\":\"";
+  int i = r.indexOf(k);
+  if (i < 0) return "";
+  i += k.length();
+  int j = r.indexOf('"', i);
+  if (j < 0) return "";
+  String v = r.substring(i, j);
+  v.replace("\\/", "/");
+  return v;
+}
+
+void tgPop() { for (int i = 1; i < tgCount; i++) tgQueue[i - 1] = tgQueue[i]; if (tgCount > 0) tgCount--; }
+
+void notify(const String& msg) {                      // Telegram kuyruğuna ekle (sadece ana döngüden çağrılır)
+  if (secretsLoaded && (tgToken == "" || tgChat == "")) return;
+  if (tgCount >= TG_Q) tgPop();                       // kuyruk doluysa en eskiyi at
+  tgQueue[tgCount++] = msg;
+}
+
+bool tgSendNow(const String& msg) {
+  if (tgToken == "" || tgChat == "" || WiFi.status() != WL_CONNECTED) return false;
+  WiFiClientSecure c; c.setInsecure();
+  HTTPClient h; h.setTimeout(8000);
+  h.begin(c, "https://api.telegram.org/bot" + tgToken + "/sendMessage?chat_id=" + urlEnc(tgChat) + "&text=" + urlEnc(msg));
+  int code = h.GET();
+  h.end();
+  Serial.printf("Telegram: %d\n", code);
+  return code == 200;
+}
+
+void tgFlush() {                                      // her turda en fazla bir mesaj gönder
+  if (tgCount == 0 || tgToken == "" || tgChat == "") return;
+  if (tgSendNow(tgQueue[0])) { tgFails = 0; tgPop(); }
+  else if (++tgFails >= 3) { tgFails = 0; tgPop(); }  // 3 denemede gitmediyse bu mesajı bırak
+}
+
+const char* bootReason() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON: return "elektrik verildi";
+    case ESP_RST_BROWNOUT: return "voltaj düştü";
+    case ESP_RST_SW: return "yeniden başlatıldı";
+    case ESP_RST_PANIC: case ESP_RST_INT_WDT: case ESP_RST_TASK_WDT: case ESP_RST_WDT: return "yazılım hatası";
+    default: return "başka bir neden";
+  }
+}
+
+void doMute() {                                       // düğmeyle sustur (internet olmasa da çalışır)
+  if (sirenOn || alarmActive) {
+    testUntil = 0;
+    sirenOn = false; alarmActive = false;
+    muteKind = 1; mutePending = true;
+  }
 }
 
 // ---------------------------------------------------------------- Wi-Fi bilgisi (kalıcı hafıza)
@@ -149,20 +246,27 @@ void resetWifi() {
 // BOOT tuşunu ve LED'i ayrı bir görevde izler (ağ işlemleri sırasında da kaçırmaz)
 void uiTask(void*) {
   pinMode(BTN_PIN, INPUT_PULLUP);
+  pinMode(MUTE_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
-  unsigned long down = 0, blink = 0;
-  bool led = false;
+  unsigned long down = 0, blink = 0, mdown = 0;
+  bool led = false, mDone = false;
   for (;;) {
     if (digitalRead(BTN_PIN) == LOW) {
       if (!down) down = millis();
       digitalWrite(LED_PIN, HIGH);
       if (millis() - down > 3000) resetWifi();
     } else {
+      if (down && millis() - down >= 60 && millis() - down < 1500) doMute();   // BOOT tuşuna kısa basış = sustur
       down = 0;
       if (portalMode) {
         if (millis() - blink > 250) { blink = millis(); led = !led; digitalWrite(LED_PIN, led); }
       } else digitalWrite(LED_PIN, LOW);
     }
+    // harici susturma düğmesi (D14 - GND)
+    if (digitalRead(MUTE_PIN) == LOW) {
+      if (!mdown) mdown = millis();
+      if (!mDone && millis() - mdown >= 60) { mDone = true; doMute(); }
+    } else { mdown = 0; mDone = false; }
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
@@ -194,6 +298,7 @@ void outputTask(void*) {
     if (alarmActive && (!prevAuto || alarmSeq != seenSeq)) autoStart = now;   // yeni alarm: sayaç baştan
     prevAuto = alarmActive; seenSeq = alarmSeq;
     if (alarmActive && autoSec > 0 && now - autoStart >= (unsigned long)autoSec * 1000UL) {
+      muteKind = 0;
       mutePending = true;     // önce bayrak, sonra kapat (ana döngü araya girip geri açmasın)
       alarmActive = false;
       sirenOn = false;
@@ -353,13 +458,14 @@ bool dbSend(const char* method, const String& path, const String& json) {
 bool dbPatch(const String& path, const String& json) { return dbSend("PATCH", path, json); }
 bool dbPost(const String& path, const String& json) { return dbSend("POST", path, json); }
 
-void logEvent(const char* type, const char* by) {
-  dbPost("/log", String("{\"type\":\"") + type + "\",\"by\":\"" + by + "\",\"t\":{\".sv\":\"timestamp\"}}");
+bool logEvent(const char* type, const char* by) {
+  return dbPost("/log", String("{\"type\":\"") + type + "\",\"by\":\"" + by + "\",\"t\":{\".sv\":\"timestamp\"}}");
 }
 
 // ---------------------------------------------------------------- başlangıç
 void setup() {
   Serial.begin(115200);
+  lastBeatMs = millis();
   digitalWrite(SIREN_PIN, ACTIVE_LOW ? HIGH : LOW);
   digitalWrite(LIGHT_PIN, ACTIVE_LOW ? HIGH : LOW);
   pinMode(SIREN_PIN, OUTPUT);
@@ -416,7 +522,33 @@ void loop() {
   }
 
   ensureAuth();
+
+  // Alarm geldi: Telegram'a hemen haber ver (Firebase işlemlerinden önce)
+  if (alarmNotifyPending) {
+    alarmNotifyPending = false;
+    if (lastAlarmTg == 0 || millis() - lastAlarmTg > 20000) {     // art arda mesaj yağmasın
+      lastAlarmTg = millis();
+      String t = nowStr();
+      notify(String("🚨 ALARM! Bariyer ışını kesildi") + (t != "" ? String(" (") + t + ")" : String("")) + ". Siren çalıyor.");
+    }
+  }
+  tgFlush();
+
   if (idToken != "") {
+    // 0) Bildirim ayarlarını (Telegram, nabız adresi) 60 sn'de bir oku
+    if (lastSecretRead == 0 || millis() - lastSecretRead > 60000) {
+      String sr = dbGet("/secret");
+      if (sr != "") {
+        if (sr == "null") { tgToken = ""; tgChat = ""; pingUrl = ""; }
+        else { tgToken = jstr(sr, "token"); tgChat = jstr(sr, "chatId"); pingUrl = jstr(sr, "url"); }
+        secretsLoaded = true;
+        lastSecretRead = millis();
+        if (bootPending) {
+          bootPending = false; evBoot = true;
+          notify(String("🔌 Alıcı açıldı (") + bootReason() + "). Elektrik kesilmiş olabilir; sistem yeniden çalışıyor.");
+        }
+      }
+    }
     // 1) Bekleyen alarmı Firebase'e bildir
     if (fbPending) {
       Serial.printf("ESP-NOW ALARM! Firebase'e yaziliyor (alinan toplam: %lu, yok sayilan: %lu)\n", rxAlarms, ignoredAlarms);
@@ -432,8 +564,17 @@ void loop() {
     // 2b) Otomatik susturuldu: Firebase'de de alarmı temizle (bu arada yeni alarm geldiyse yazma)
     if (mutePending) {
       if (alarmActive) mutePending = false;
-      else if (dbPatch("/alarm", "{\"siren\":false,\"triggered\":false}")) { mutePending = false; logEvent("automute", "alici"); }
+      else if (dbPatch("/alarm", "{\"siren\":false,\"triggered\":false}")) {
+        mutePending = false;
+        if (muteKind == 1) { logEvent("mute", "alici-buton"); notify("🔇 Alarm alıcı düğmesiyle susturuldu."); }
+        else { logEvent("automute", "alici"); notify("🔇 Alarm kendiliğinden susturuldu (otomatik susturma)."); }
+      }
     }
+    // 2c) Bekleyen olay kayıtları (kart açıldı, verici durumu, ışın)
+    if (evBoot)   { if (logEvent("boot", "alici")) evBoot = false; }
+    if (evVerOff) { if (logEvent("verici_offline", "alici")) evVerOff = false; }
+    if (evVerOn)  { if (logEvent("verici_online", "alici")) evVerOn = false; }
+    if (evBeam)   { if (logEvent("beam_stuck", "alici")) evBeam = false; }
     // 3) Panel durumunu oku
     String r = dbGet("/alarm");
     if (r != "") {
@@ -444,6 +585,12 @@ void loop() {
       autoMuteOn = r.indexOf("\"autoMuteOn\":false") < 0;
       int am = r.indexOf("\"autoMuteSeconds\":");
       autoMuteSeconds = (am >= 0) ? r.substring(am + 18).toInt() : 0;
+      int bw = r.indexOf("\"beamWarnMin\":");
+      beamWarnMin = (bw >= 0) ? r.substring(bw + 14).toInt() : 10;
+      if (r.indexOf("\"tgTest\":true") >= 0) {
+        notify("✅ Test mesajı: Telegram bildirimi çalışıyor.");
+        dbPatch("/alarm", "{\"tgTest\":false}");
+      }
       schedOn = r.indexOf("\"schedOn\":true") >= 0;
       int z = r.indexOf("\"schedStart\":");
       schedStartMin = (z >= 0) ? r.substring(z + 13).toInt() : 0;
@@ -490,5 +637,30 @@ void loop() {
     }
   }
   
+  // Verici ve ışın izleme (Firebase'e bağlı değil)
+  {
+    unsigned long nm = millis();
+    bool vAlive = (nm - lastBeatMs) < 100000UL;
+    if (!vAlive && !vOffNotified) {
+      vOffNotified = true; evVerOff = true;
+      notify("⚠️ Verici (bariyer) 100 saniyedir görünmüyor. Elektriği veya sinyali kesilmiş olabilir; bariyer şu an korumuyor olabilir.");
+    }
+    if (vAlive && vOffNotified) { vOffNotified = false; evVerOn = true; notify("✅ Verici yeniden bağlandı."); }
+    unsigned long cs = contactSince;
+    if (!cs) beamNotified = false;
+    else if (vAlive && !beamNotified && beamWarnMin > 0 && nm - cs > (unsigned long)beamWarnMin * 60000UL) {
+      beamNotified = true; evBeam = true;
+      notify(String("⚠️ Bariyer ışını ") + (int)beamWarnMin + " dakikadır kesik görünüyor. Kablo kopmuş, bariyer kaymış veya önünde engel olabilir.");
+    }
+  }
+
+  // Nabız: dış bir izleme servisine (ör. healthchecks.io) dakikada bir "yaşıyorum" bilgisi
+  if (pingUrl != "" && WiFi.status() == WL_CONNECTED && millis() - lastPing > 60000) {
+    lastPing = millis();
+    WiFiClientSecure pc; pc.setInsecure();
+    HTTPClient ph; ph.setTimeout(6000);
+    if (ph.begin(pc, pingUrl)) { ph.GET(); ph.end(); }
+  }
+
   delay(1000);
 }

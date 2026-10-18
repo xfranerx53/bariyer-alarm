@@ -217,10 +217,34 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
   </details>
 
   <details class="card set">
-    <summary>📱 Bildirim</summary>
+    <summary>📱 Bildirim ve izleme <span class="sum" id="sumNotif"></span></summary>
     <div class="body">
-      <button class="alt" id="notif">Bildirimleri aç</button>
-      <div class="small" style="margin-top:8px">Bildirim sadece bu sayfa açıkken gelir (sekme arka planda olabilir).</div>
+      <button class="alt" id="notif">Tarayıcı bildirimlerini aç</button>
+      <div class="small" style="margin-top:6px">Sadece bu sayfa açıkken gelir.</div>
+
+      <div class="field">
+        <label>Telegram bildirimi (sayfa kapalıyken de gelir)</label>
+        <input id="tgToken" type="password" placeholder="Bot anahtarı (token)" autocomplete="off">
+        <input id="tgChat" type="text" inputmode="numeric" placeholder="Sohbet numarası (chat id)" autocomplete="off">
+        <div class="two"><button id="tgSave">Kaydet</button><button id="tgTest" class="alt">Test mesajı</button></div>
+        <div class="small" id="tgInfo" style="margin-top:6px"></div>
+        <button class="link hidden" id="tgDel">Telegram bilgisini sil</button>
+        <div class="small">Alarm, verici çevrimdışı, ışın uzun süre kesik, kart açıldı ve alarm susturuldu olaylarında mesaj gelir. Bilgi bir kez kaydedilir, güvenlik için ekranda gösterilmez.</div>
+      </div>
+
+      <div class="field">
+        <label for="beamWarn">Işın kaç dakika kesik kalırsa uyarılsın?</label>
+        <input id="beamWarn" type="number" inputmode="numeric" min="0" step="1" placeholder="10">
+        <div class="small">0 yazarsan bu uyarı kapanır. Boş bırakırsan 10 dakika olur. Bariyer vericiye bağlı değilken de ışın "kesik" görünür.</div>
+      </div>
+
+      <div class="field">
+        <label for="pingUrl">Alıcı izleme adresi (nabız)</label>
+        <input id="pingUrl" type="url" placeholder="https://hc-ping.com/..." autocomplete="off">
+        <button id="pingSave" class="alt">Kaydet</button>
+        <div class="small" id="pingInfo" style="margin-top:6px"></div>
+        <div class="small">Alıcı dakikada bir bu adrese haber verir. Haber kesilirse (alıcı elektriksiz veya internetsiz kalırsa) izleme servisi sana e-posta veya Telegram ile bildirir. Adres boş bırakılıp kaydedilirse silinir.</div>
+      </div>
     </div>
   </details>
 
@@ -252,7 +276,7 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const $ = id => document.getElementById(id);
 
-let alarm = {}, status = {}, logs = [], offset = 0, connected = true, prevSiren = null, prevActive = null, subs = [];
+let alarm = {}, status = {}, logs = [], offset = 0, connected = true, prevSiren = null, prevActive = null, subs = [], tgSaved = false, pingSaved = false, devOn = {alici:null, verici:null};
 
 /* ---------- yardımcılar ---------- */
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),2600); }
@@ -322,6 +346,50 @@ $("sirenMs").onchange  = e => intervalChange(e,"sirenMs");
 $("sirenSec").onchange = e => limitChange(e,"sirenSeconds");
 $("sirenRepeat").onchange = e => setCfg({sirenRepeat:e.target.checked});
 $("autoMuteOn").onchange = e => setCfg({autoMuteOn:e.target.checked});
+
+/* ---------- bildirim ve izleme ---------- */
+$("tgSave").onclick = async () => {
+  const tk = $("tgToken").value.trim(), ch = $("tgChat").value.trim();
+  if(!tk || !ch) return toast("Bot anahtarı ve sohbet numarası ikisi de gerekli");
+  try{ await update(ref(db,"secret/telegram"),{token:tk, chatId:ch}); $("tgToken").value=""; $("tgChat").value=""; toast("Telegram bilgisi kaydedildi"); }
+  catch(_){ toast("Kaydedilemedi"); }
+};
+$("tgDel").onclick = async () => {
+  if(!confirm("Telegram bilgisi silinsin mi? Bildirimler durur.")) return;
+  try{ await update(ref(db,"secret"),{telegram:null}); toast("Telegram bilgisi silindi"); }catch(_){ toast("Silinemedi"); }
+};
+$("tgTest").onclick = async () => {
+  if(!tgSaved) return toast("Önce Telegram bilgisini kaydet");
+  try{ await update(ref(db,"alarm"),{tgTest:true}); toast("Test isteği gönderildi, birkaç saniye içinde mesaj gelmeli"); }
+  catch(_){ toast("Gönderilemedi"); }
+};
+$("pingSave").onclick = async () => {
+  const u = $("pingUrl").value.trim();
+  if(u && !/^https:\/\//i.test(u)) return toast("Adres https:// ile başlamalı");
+  try{ await update(ref(db,"secret"),{ping: u ? {url:u} : null}); $("pingUrl").value=""; toast(u ? "İzleme adresi kaydedildi" : "İzleme adresi silindi"); }
+  catch(_){ toast("Kaydedilemedi"); }
+};
+$("beamWarn").onchange = e => {
+  const raw = String(e.target.value).trim();
+  let v = 10;
+  if(raw !== ""){ const n = num(raw); if(!isFinite(n) || n < 0) return toast("Geçerli bir sayı yaz"); v = Math.min(Math.round(n),1440); }
+  e.target.value = v; setCfg({beamWarnMin:v});
+};
+function renderSecrets(){
+  $("tgInfo").textContent = tgSaved ? "Telegram bilgisi kayıtlı ✓" : "Telegram bilgisi henüz kaydedilmedi.";
+  $("tgDel").classList.toggle("hidden", !tgSaved);
+  $("pingInfo").textContent = pingSaved ? "İzleme adresi kayıtlı ✓" : "İzleme adresi yok.";
+  $("sumNotif").textContent = tgSaved ? "Telegram açık" : "Telegram yok";
+}
+function trackDev(k, name, on){            // cihaz çevrimdışı/çevrimiçi olunca haber ver (sayfa açıkken)
+  if(devOn[k] !== null && devOn[k] !== on){
+    toast(on ? name+" yeniden çevrimiçi" : "⚠️ "+name+" çevrimdışı");
+    if(!on && "Notification" in window && Notification.permission==="granted"){
+      try{ new Notification("⚠️ Bariyer Alarm", { body: name+" çevrimdışı oldu. Elektrik veya bağlantı kesilmiş olabilir.", tag:"dev-"+k }); }catch(_){}
+    }
+  }
+  devOn[k] = on;
+}
 $("autoMuteSec").onchange = e => limitChange(e,"autoMuteSeconds");
 
 /* ---------- zamanlama ---------- */
@@ -411,6 +479,8 @@ function renderSettings(){
   $("autoInfo").textContent = au ? "Otomatik susturma: alarmdan "+au+" sn sonra kendiliğinden susturulur." : "Otomatik susturma kapalı.";
   if(document.activeElement !== $("autoMuteOn")) $("autoMuteOn").checked = alarm.autoMuteOn !== false;
   setVal("autoMuteSec", alarm.autoMuteSeconds ? alarm.autoMuteSeconds : "");
+  setVal("beamWarn", alarm.beamWarnMin === undefined ? 10 : alarm.beamWarnMin);
+  renderSecrets();
   $("autoMuteSec").disabled = alarm.autoMuteOn === false;
   $("sumMute").textContent = au ? au+" sn sonra" : "Kapalı";
   $("sumSiren").textContent = (sBlink ? "Aralıklı "+((alarm.sirenMs||1000)/1000)+" sn" : "Sürekli") + " · " + (ss ? ss+" sn" : "süresiz");
@@ -479,13 +549,13 @@ function renderDevices(){
   const a = status.alici, v = status.verici;
   if(a && a.lastSeen){
     const on = now()-a.lastSeen < ONLINE;
-    setChip("aliciChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı");
+    setChip("aliciChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı"); trackDev("alici","Alıcı",on);
     $("aliciInfo").textContent = ago(a.lastSeen) + (a.rssi ? " · Wi-Fi sinyal "+a.rssi+" dBm" : "") + (a.fw ? " · yazılım v"+a.fw : " · eski yazılım");
   }else{ setChip("aliciChip","na","Bilgi yok"); $("aliciInfo").textContent="Henüz bilgi gelmedi"; }
 
   if(v && v.lastSeen){
     const on = now()-v.lastSeen < ONLINE;
-    setChip("vericiChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı");
+    setChip("vericiChip", on?"ok":"bad", on?"Çevrimiçi":"Çevrimdışı"); trackDev("verici","Verici",on);
     $("vericiInfo").textContent = ago(v.lastSeen);
     if(on){
       if(v.contact){ setChip("beamChip","bad","Kesik / bağlı değil"); }
@@ -501,9 +571,10 @@ function renderDevices(){
 const LABEL = {
   alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Alarm susturuldu"], automute:["🔇","Alarm kendiliğinden susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
   disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"],
-  light_on:["💡","Işık açıldı"], light_off:["🌑","Işık kapatıldı"]
+  boot:["🔌","Alıcı açıldı"], verici_offline:["⚠️","Verici görünmüyor",true], verici_online:["✅","Verici yeniden bağlandı"],
+  beam_stuck:["⚠️","Işın uzun süredir kesik",true], light_on:["💡","Işık açıldı"], light_off:["🌑","Işık kapatıldı"]
 };
-const WHO = { verici:"Bariyer", alici:"Alıcı" };
+const WHO = { verici:"Bariyer", alici:"Alıcı", "alici-buton":"Alıcı düğmesi" };
 function renderLog(){
   const ul=$("log");
   if(!logs.length){ ul.innerHTML='<li class="small">Henüz kayıt yok</li>'; return; }
@@ -530,12 +601,18 @@ function listen(){
     prevActive = active;
     renderHero();
   }));
+  subs.push(onValue(ref(db,"secret"), s => {      // sadece "kayıtlı mı" bilgisi alınır, değerler ekranda tutulmaz
+    const v = s.val() || {};
+    tgSaved = !!(v.telegram && v.telegram.token && v.telegram.chatId);
+    pingSaved = !!(v.ping && v.ping.url);
+    renderSecrets();
+  }));
   subs.push(onValue(ref(db,"status"), s => { status = s.val() || {}; renderDevices(); }));
   subs.push(onValue(query(ref(db,"log"), limitToLast(30)), s => {
     const arr=[]; s.forEach(c=>{ arr.push(c.val()); }); logs = arr.reverse(); renderLog();
   }));
 }
-function unlisten(){ subs.forEach(u=>u()); subs=[]; prevSiren=null; prevActive=null; }
+function unlisten(){ subs.forEach(u=>u()); subs=[]; prevSiren=null; prevActive=null; devOn={alici:null,verici:null}; tgSaved=pingSaved=false; }
 
 onAuthStateChanged(auth, u => {
   $("login").classList.toggle("hidden", !!u);
