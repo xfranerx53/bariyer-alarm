@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1720">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bariyer">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script>window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__bip=e;});</script>
 <title>Bariyer Alarm</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <style>
@@ -93,6 +99,16 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
 .field .small{margin-top:2px}
 .check{display:flex;gap:10px;align-items:center;font-size:.95rem;font-weight:600;margin-top:16px}
 .check input{width:auto;margin:0;padding:0}
+.sch{border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px;background:var(--soft)}
+.sch .schh{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.sch .schh b{font-size:.9rem}
+.sch .schh .small{flex:1}
+.sch .schh button{width:auto;margin:0;padding:4px 8px;font-size:.82rem}
+.sch .dayrow{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}
+.sch .dayrow button{margin:0;padding:10px 0;font-size:.82rem}
+.sch .presets{display:flex;gap:6px;margin-top:8px}
+.sch .presets button{margin:0;padding:7px 4px;font-size:.8rem;font-weight:600}
+#schedList.off{opacity:.5;pointer-events:none}
 .userbar{display:flex;gap:8px;align-items:center}
 .userbar span{font-size:.82rem;color:var(--mute);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .userbar button{width:auto;padding:7px 12px;margin:0;font-size:.85rem}
@@ -209,16 +225,10 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <summary>🕒 Zamanlama <span class="sum" id="sumSched"></span></summary>
     <div class="body">
       <label class="check"><input type="checkbox" id="schedOn"> Sadece belirlediğim gün ve saatlerde koru</label>
-      <div class="small">Kapalıysa sistem, etkin olduğu sürece her an korur. Saatler Türkiye saatidir.</div>
-      <div class="two field">
-        <div><label for="schedStart">Başlangıç</label><input id="schedStart" type="time" value="00:00"></div>
-        <div><label for="schedEnd">Bitiş</label><input id="schedEnd" type="time" value="00:00"></div>
-      </div>
-      <div class="small">Başlangıç ve bitiş aynıysa seçili günlerde 24 saat korur. Başlangıç bitişten büyükse gece yarısını geçer (örnek 22:00 – 06:00).</div>
-      <div class="field">
-        <label>Günler</label>
-        <div id="days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px"></div>
-      </div>
+      <div class="small">Kapalıysa sistem, etkin olduğu sürece her an korur. Saatler Türkiye saatidir. Birden fazla program ekleyebilirsin (örnek: hafta içi gece ayrı, hafta sonu ayrı). Programlardan <b>herhangi biri</b> içindeysen koruma devrededir.</div>
+      <div id="schedList"></div>
+      <button type="button" class="alt" id="schedAdd">+ Program ekle</button>
+      <div class="small" style="margin-top:10px">Başlangıç ve bitiş aynıysa seçili günlerde 24 saat korur. Başlangıç bitişten büyükse gece yarısını geçer (örnek 22:00 – 06:00; gün, aralığın başladığı güne göre seçilir).</div>
       <div class="small" id="schedInfo" style="margin-top:12px"></div>
     </div>
   </details>
@@ -252,6 +262,15 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
         <div class="small" id="pingInfo" style="margin-top:6px"></div>
         <div class="small">Alıcı dakikada bir bu adrese haber verir. Haber kesilirse (alıcı elektriksiz veya internetsiz kalırsa) izleme servisi sana e-posta veya Telegram ile bildirir. Adres boş bırakılıp kaydedilirse silinir.</div>
       </div>
+    </div>
+  </details>
+
+  <details class="card set" id="installCard">
+    <summary>📲 Telefona kur <span class="sum" id="sumInstall"></span></summary>
+    <div class="body">
+      <div class="small" style="margin-top:14px">Paneli ana ekrana simge olarak ekle; tarayıcı çubuğu olmadan, uygulama gibi tam ekran açılır.</div>
+      <button id="installBtn" class="hidden">Ana ekrana ekle</button>
+      <div class="small" id="installInfo" style="margin-top:10px"></div>
     </div>
   </details>
 
@@ -399,19 +418,83 @@ function trackDev(k, name, on){            // cihaz çevrimdışı/çevrimiçi o
 }
 $("autoMuteSec").onchange = e => limitChange(e,"autoMuteSeconds");
 
-/* ---------- zamanlama ---------- */
+/* ---------- zamanlama (birden fazla program) ---------- */
 const DAYN = ["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
-$("days").innerHTML = DAYN.map((n,i)=>`<button type="button" class="alt" data-d="${i}" style="margin:0;padding:10px 0;font-size:.82rem">${n}</button>`).join("");
-$("days").onclick = e => {
-  const b = e.target.closest("button[data-d]"); if(!b) return;
-  const mask = (alarm.schedDays===undefined ? 127 : alarm.schedDays) ^ (1<<(+b.dataset.d));
-  setCfg({schedDays: mask});
-};
+const MAXS = 6;                                   // en fazla program sayısı (alıcıdaki sınırla aynı)
+const D_WEEKDAY = 31, D_WEEKEND = 96, D_ALL = 127;
 function toMin(v){ const m=/^(\d{1,2}):(\d{2})$/.exec(v||""); return m ? (+m[1])*60+(+m[2]) : 0; }
 function fromMin(n){ n=n||0; return String(Math.floor(n/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0"); }
+function parseScheds(){                           // Firebase'deki "başlangıç,bitiş,günler;..." yazısını listeye çevirir
+  const s = alarm.schedules;
+  if(typeof s === "string"){
+    const out = s.split(";").map(p=>p.split(",").map(Number)).filter(x=>x.length===3 && x.every(Number.isFinite))
+      .map(x=>({a:x[0], b:x[1], d:x[2]&127}));
+    if(out.length) return out.slice(0,MAXS);
+  }
+  // eski tek zamanlama alanları (alıcı da aynısını yapar)
+  return [{a:alarm.schedStart||0, b:alarm.schedEnd||0, d:alarm.schedDays===undefined?127:alarm.schedDays}];
+}
+function saveScheds(list){
+  const f = list[0];
+  // eski alanlara ilk programı da yazarız (eski alıcı yazılımı yine de bir program uygulasın)
+  setCfg({schedules:list.map(x=>x.a+","+x.b+","+x.d).join(";"), schedStart:f.a, schedEnd:f.b, schedDays:f.d});
+}
+function dayLabel(d){
+  if(d===D_ALL) return "Her gün";
+  if(d===D_WEEKDAY) return "Hafta içi";
+  if(d===D_WEEKEND) return "Hafta sonu";
+  if(d===0) return "Gün seçilmedi";
+  return DAYN.filter((_,i)=>(d>>i)&1).join(", ");
+}
+function schedHtml(x,i,n){
+  return `<div class="sch" data-i="${i}">
+    <div class="schh"><b>Program ${i+1}</b><span class="small" data-role="lbl"></span>${n>1?'<button type="button" class="alt" data-act="del">Sil</button>':''}</div>
+    <div class="two">
+      <div><label>Başlangıç</label><input type="time" data-role="a"></div>
+      <div><label>Bitiş</label><input type="time" data-role="b"></div>
+    </div>
+    <div class="dayrow">${DAYN.map((nm,k)=>`<button type="button" data-act="day" data-d="${k}">${nm}</button>`).join("")}</div>
+    <div class="presets">
+      <button type="button" class="alt" data-act="preset" data-m="${D_WEEKDAY}">Hafta içi</button>
+      <button type="button" class="alt" data-act="preset" data-m="${D_WEEKEND}">Hafta sonu</button>
+      <button type="button" class="alt" data-act="preset" data-m="${D_ALL}">Her gün</button>
+    </div>
+  </div>`;
+}
+function renderSchedList(){
+  const list = parseScheds(), box = $("schedList");
+  if(box.children.length !== list.length) box.innerHTML = list.map((x,i)=>schedHtml(x,i,list.length)).join("");
+  list.forEach((x,i)=>{
+    const el = box.children[i];
+    const ia = el.querySelector('[data-role="a"]'), ib = el.querySelector('[data-role="b"]');
+    if(document.activeElement !== ia) ia.value = fromMin(x.a);
+    if(document.activeElement !== ib) ib.value = fromMin(x.b);
+    el.querySelector('[data-role="lbl"]').textContent = dayLabel(x.d);
+    el.querySelectorAll('[data-act="day"]').forEach((bt,k)=>{ bt.className = (x.d>>k)&1 ? "" : "alt"; });
+  });
+  box.classList.toggle("off", !alarm.schedOn);
+  $("schedAdd").disabled = !alarm.schedOn || list.length >= MAXS;
+}
+$("schedList").onchange = e => {
+  const t = e.target, el = t.closest(".sch"); if(!el || !t.dataset.role) return;
+  const list = parseScheds(), x = list[+el.dataset.i]; if(!x) return;
+  x[t.dataset.role] = toMin(t.value);
+  saveScheds(list);
+};
+$("schedList").onclick = e => {
+  const t = e.target.closest("button[data-act]"), el = e.target.closest(".sch"); if(!t || !el) return;
+  const list = parseScheds(), i = +el.dataset.i, x = list[i]; if(!x) return;
+  if(t.dataset.act === "day") x.d ^= (1 << (+t.dataset.d));
+  else if(t.dataset.act === "preset") x.d = +t.dataset.m;
+  else if(t.dataset.act === "del"){ if(list.length < 2) return; list.splice(i,1); }
+  saveScheds(list);
+};
+$("schedAdd").onclick = () => {
+  const list = parseScheds(); if(list.length >= MAXS) return toast("En fazla "+MAXS+" program eklenebilir");
+  list.push({a:22*60, b:6*60, d:D_ALL});
+  saveScheds(list);
+};
 $("schedOn").onchange = e => setCfg({schedOn:e.target.checked});
-$("schedStart").onchange = e => setCfg({schedStart:toMin(e.target.value)});
-$("schedEnd").onchange = e => setCfg({schedEnd:toMin(e.target.value)});
 function istNow(){                         // Türkiye saati: {gün 0=Pzt, dakika}
   const p = new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Istanbul",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(now()));
   const g = t => p.find(x=>x.type===t).value;
@@ -425,13 +508,14 @@ function autoSecs(){                       // alıcıdaki hesapla aynı
   if(sl <= 0 || (lUsed && ll <= 0)) return 0;
   return Math.max(sl, lUsed ? ll : 0);
 }
-function inSchedule(){                     // alıcıdaki hesapla aynı
+function inSchedule(){                     // alıcıdaki hesapla aynı: programlardan biri içindeyse koruma devrede
   if(!alarm.schedOn) return true;
-  const a=alarm.schedStart||0, b=alarm.schedEnd||0, d=alarm.schedDays===undefined?127:alarm.schedDays;
   const t=istNow(), prev=(t.day+6)%7;
-  if(a===b) return !!((d>>t.day)&1);
-  if(a<b) return !!((d>>t.day)&1) && t.min>=a && t.min<b;
-  return (!!((d>>t.day)&1) && t.min>=a) || (!!((d>>prev)&1) && t.min<b);
+  return parseScheds().some(({a,b,d})=>{
+    if(a===b) return !!((d>>t.day)&1);
+    if(a<b) return !!((d>>t.day)&1) && t.min>=a && t.min<b;
+    return (!!((d>>t.day)&1) && t.min>=a) || (!!((d>>prev)&1) && t.min<b);
+  });
 }
 
 /* susturma sesi: bu cihazın tercihi (tarayıcı hafızasında) */
@@ -476,12 +560,11 @@ function renderSettings(){
   if(document.activeElement !== $("sirenRepeat")) $("sirenRepeat").checked = alarm.sirenRepeat !== false;
 
   if(document.activeElement !== $("schedOn")) $("schedOn").checked = !!alarm.schedOn;
-  setVal("schedStart", fromMin(alarm.schedStart)); setVal("schedEnd", fromMin(alarm.schedEnd));
-  const dm = alarm.schedDays===undefined ? 127 : alarm.schedDays;
-  [...$("days").children].forEach((b,i)=>{ b.className = (dm>>i)&1 ? "" : "alt"; });
-  [...$("days").children].forEach(b=>b.style.opacity = alarm.schedOn ? 1 : .5);
-  $("schedStart").disabled = $("schedEnd").disabled = !alarm.schedOn;
-  $("schedInfo").textContent = !alarm.schedOn ? "Zamanlama kapalı." : (inSchedule() ? "Şu an koruma saatleri içinde: koruma devrede." : "Şu an koruma saatleri dışında: alarm çalmaz.");
+  renderSchedList();
+  const sl = parseScheds();
+  const fwOld = sl.length > 1 && !(status.alici && parseFloat(status.alici.fw) >= 3.7);
+  $("schedInfo").textContent = !alarm.schedOn ? "Zamanlama kapalı." : (inSchedule() ? "Şu an koruma saatleri içinde: koruma devrede." : "Şu an koruma saatleri dışında: alarm çalmaz.")
+    + (fwOld ? " ⚠️ Alıcıda yazılım v3.7'den eski: birden fazla program için alıcıya v3.7 yüklenmeli, o zamana kadar yalnızca ilk program geçerli." : "");
   const au = autoSecs();
   $("autoInfo").textContent = au ? "Otomatik susturma: alarmdan "+au+" sn sonra kendiliğinden susturulur." : "Otomatik susturma kapalı.";
   if(document.activeElement !== $("autoMuteOn")) $("autoMuteOn").checked = alarm.autoMuteOn !== false;
@@ -491,7 +574,7 @@ function renderSettings(){
   $("autoMuteSec").disabled = alarm.autoMuteOn === false;
   $("sumMute").textContent = au ? au+" sn sonra" : "Kapalı";
   $("sumSiren").textContent = (sBlink ? "Aralıklı "+((alarm.sirenMs||1000)/1000)+" sn" : "Sürekli") + " · " + (ss ? ss+" sn" : "süresiz");
-  $("sumSched").textContent = alarm.schedOn ? fromMin(alarm.schedStart)+" – "+fromMin(alarm.schedEnd) : "Kapalı";
+  $("sumSched").textContent = !alarm.schedOn ? "Kapalı" : (sl.length>1 ? sl.length+" program" : fromMin(sl[0].a)+" – "+fromMin(sl[0].b));
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
   $("lightBtn").textContent = on ? "Işığı kapat" : "Işığı aç";
   $("lightBtn").className = on ? "" : "alt";
@@ -616,12 +699,35 @@ function listen(){
     pingSaved = !!(v.ping && v.ping.url);
     renderSecrets();
   }));
-  subs.push(onValue(ref(db,"status"), s => { status = s.val() || {}; renderDevices(); }));
+  subs.push(onValue(ref(db,"status"), s => { status = s.val() || {}; renderDevices(); renderSettings(); }));
   subs.push(onValue(query(ref(db,"log"), limitToLast(30)), s => {
     const arr=[]; s.forEach(c=>{ arr.push(c.val()); }); logs = arr.reverse(); renderLog();
   }));
 }
 function unlisten(){ subs.forEach(u=>u()); subs=[]; prevSiren=null; prevActive=null; devOn={alici:null,verici:null}; tgSaved=pingSaved=false; }
+
+/* ---------- uygulama olarak kurma (PWA) ---------- */
+let deferredInstall = window.__bip || null;
+const isStandalone = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+function renderInstall(){
+  const done = isStandalone();
+  $("installBtn").classList.toggle("hidden", done || !deferredInstall);
+  $("sumInstall").textContent = done ? "Kurulu ✓" : "";
+  $("installInfo").textContent = done ? "Panel şu an uygulama olarak açık." :
+    deferredInstall ? "Yukarıdaki düğmeye bas, çıkan pencerede onayla." :
+    isIOS() ? "iPhone/iPad: Safari'de alttaki Paylaş simgesine (kare ve yukarı ok) bas, aşağı kaydır, \"Ana Ekrana Ekle\"yi seç. Başka bir tarayıcıdaysan önce bu sayfayı Safari'de aç." :
+    "Android: Chrome'da sağ üstteki ⋮ menüsünü aç, \"Uygulamayı yükle\" veya \"Ana ekrana ekle\"yi seç.";
+}
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; renderInstall(); });
+window.addEventListener("appinstalled", () => { deferredInstall = null; renderInstall(); toast("Uygulama kuruldu"); });
+$("installBtn").onclick = async () => {
+  if(!deferredInstall) return;
+  try{ deferredInstall.prompt(); await deferredInstall.userChoice; }catch(_){}
+  deferredInstall = null; renderInstall();
+};
+renderInstall();
+if("serviceWorker" in navigator) window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(()=>{}); });
 
 onAuthStateChanged(auth, u => {
   $("login").classList.toggle("hidden", !!u);

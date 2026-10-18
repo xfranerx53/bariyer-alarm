@@ -1,4 +1,4 @@
-// ALICI (ESP32 #2)  |  Sürüm 3.6
+// ALICI (ESP32 #2)  |  Sürüm 3.7
 // Görevi: vericiden ESP-NOW ile alarm almak, siren rölesini çekmek,
 // Firebase'e bildirmek, panelden gelen komutları (sustur, test, süre, devre dışı) uygulamak.
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
@@ -12,6 +12,10 @@
 // YENİ (v3.6): Telegram bildirimi (alarm, verici çevrimdışı, ışın uzun süre kesik, kart açıldı, susturuldu),
 //            düğmeyle sustur (BOOT tuşuna kısa bas veya D14 - GND arasına düğme), nabız (healthchecks) adresi.
 //            Telegram ve nabız bilgisi Firebase'deki /secret altından okunur (panelden girilir, repoda yok).
+// YENİ (v3.7): Birden fazla zamanlama programı (en fazla 6; örnek: hafta içi gece ayrı, hafta sonu ayrı).
+//            Programlardan herhangi biri içindeyse koruma devrededir. Panel programları Firebase'e
+//            /alarm/schedules altında \"başlangıç,bitiş,günler;...\" yazısı olarak kaydeder. Bu alan yoksa
+//            eski tek zamanlama alanları (schedStart/schedEnd/schedDays) kullanılır.
 // Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
 // Siren ve ışık ayrı ayrı ayarlanır: sürekli/aralıklı, aralık süresi, en fazla süre (panelden).
 // Wi-Fi ve ESP şifresi aynı klasördeki secrets.h dosyasındadır (ilk açılışta kullanılır).
@@ -27,7 +31,7 @@
 #include "secrets.h"
 
 const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
-const char* FW = "3.6";                 // yazılım sürümü (panelde görünür)
+const char* FW = "3.7";                 // yazılım sürümü (panelde görünür)
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
@@ -84,6 +88,9 @@ volatile int schedStartMin = 0;      // koruma başlangıcı (gün başından da
 volatile int schedEndMin = 0;        // koruma bitişi (başlangıçla aynıysa 24 saat)
 volatile int schedDays = 127;        // gün maskesi: bit0 = Pazartesi ... bit6 = Pazar
 volatile bool schedActiveNow = true; // şu an zamanlamaya göre koruma devrede mi
+const int MAX_SCHED = 6;             // en fazla program sayısı (panelle aynı)
+volatile int schedCnt = 0;           // panelden gelen program sayısı (0 = eski tek zamanlama alanları geçerli)
+volatile int schedA[MAX_SCHED], schedB[MAX_SCHED], schedD[MAX_SCHED];   // her programın başlangıç, bitiş, gün maskesi
 volatile unsigned long alarmSeq = 0; // kabul edilen her yeni alarmda artar (otomatik susturma sayacını yeniler)
 volatile bool mutePending = false;   // otomatik susturuldu, Firebase'e yazılacak
 
@@ -104,6 +111,13 @@ volatile int lightSeconds = 0;           // alarmda ışık en fazla kaç sn yan
 void relay(int pin, bool on) { digitalWrite(pin, (on != ACTIVE_LOW) ? HIGH : LOW); }
 
 // ---------------------------------------------------------------- zamanlama
+// Tek bir program şu an içinde mi? (a = başlangıç, b = bitiş: gün başından dakika, d = gün maskesi)
+bool inWindow(int a, int b, int d, int day, int prev, int m) {
+  if (a == b) return (d >> day) & 1;               // başlangıç = bitiş: seçili günlerde 24 saat
+  if (a < b) return ((d >> day) & 1) && m >= a && m < b;
+  return (((d >> day) & 1) && m >= a) || (((d >> prev) & 1) && m < b);   // gece yarısını aşan aralık
+}
+
 bool computeSched() {
   if (!schedOn) return true;
   time_t t = time(nullptr);
@@ -112,10 +126,44 @@ bool computeSched() {
   int day = (tmv.tm_wday + 6) % 7;                 // 0 = Pazartesi
   int prev = (day + 6) % 7;
   int m = tmv.tm_hour * 60 + tmv.tm_min;
-  int a = schedStartMin, b = schedEndMin, d = schedDays;
-  if (a == b) return (d >> day) & 1;               // başlangıç = bitiş: seçili günlerde 24 saat
-  if (a < b) return ((d >> day) & 1) && m >= a && m < b;
-  return (((d >> day) & 1) && m >= a) || (((d >> prev) & 1) && m < b);   // gece yarısını aşan aralık
+  int n = schedCnt;
+  if (n <= 0) return inWindow(schedStartMin, schedEndMin, schedDays, day, prev, m);   // eski tek zamanlama
+  for (int i = 0; i < n && i < MAX_SCHED; i++)     // programlardan biri içindeyse koruma devrede
+    if (inWindow(schedA[i], schedB[i], schedD[i], day, prev, m)) return true;
+  return false;
+}
+
+// Panelden gelen "başlangıç,bitiş,günler;başlangıç,bitiş,günler;..." yazısını okur.
+// Alan yoksa veya hiç geçerli program çıkmazsa schedCnt = 0 olur (eski tek zamanlama kullanılır).
+void parseSchedules(const String& r) {
+  int a[MAX_SCHED], b[MAX_SCHED], d[MAX_SCHED], n = 0;
+  int k = r.indexOf("\"schedules\":\"");
+  if (k >= 0) {
+    int p = k + 13;                                // "schedules":" ifadesinden sonrası
+    int e = r.indexOf('"', p);
+    if (e > p) {
+      String s = r.substring(p, e);
+      int pos = 0;
+      while (pos < (int)s.length() && n < MAX_SCHED) {
+        int semi = s.indexOf(';', pos);
+        if (semi < 0) semi = s.length();
+        String part = s.substring(pos, semi);
+        int c1 = part.indexOf(',');
+        int c2 = (c1 >= 0) ? part.indexOf(',', c1 + 1) : -1;
+        if (c1 > 0 && c2 > c1) {
+          int va = part.substring(0, c1).toInt();
+          int vb = part.substring(c1 + 1, c2).toInt();
+          int vd = part.substring(c2 + 1).toInt();
+          if (va < 0) va = 0; if (va > 1439) va = 1439;
+          if (vb < 0) vb = 0; if (vb > 1439) vb = 1439;
+          a[n] = va; b[n] = vb; d[n] = vd & 127; n++;
+        }
+        pos = semi + 1;
+      }
+    }
+  }
+  for (int i = 0; i < n; i++) { schedA[i] = a[i]; schedB[i] = b[i]; schedD[i] = d[i]; }
+  schedCnt = n;                                    // sayı en son yazılır
 }
 
 // ---------------------------------------------------------------- ESP-NOW
@@ -598,6 +646,7 @@ void loop() {
       schedEndMin = (z >= 0) ? r.substring(z + 11).toInt() : 0;
       z = r.indexOf("\"schedDays\":");
       schedDays = (z >= 0) ? (r.substring(z + 12).toInt() & 127) : 127;
+      parseSchedules(r);
       sirenRepeat = r.indexOf("\"sirenRepeat\":false") < 0;
       sirenBlink = r.indexOf("\"sirenMode\":\"blink\"") >= 0;
       int k = r.indexOf("\"sirenMs\":");

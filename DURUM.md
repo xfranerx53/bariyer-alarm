@@ -1,4 +1,4 @@
-# DURUM (Son güncelleme: 18 Ekim 2026, akşam)
+# DURUM (Son güncelleme: 18 Ekim 2026, gece)
 
 > **Yeni bir Claude sohbetine başlıyorsan:** Bu repo zip'ini sohbete yükle. Claude bu dosyayı okuyup kaldığımız yerden devam eder.
 > **Claude için kural:** Her cevabın sonunda güncel `DURUM.md` dosyasını ver. Kullanıcı bunu GitHub'a yükleyecek.
@@ -6,6 +6,9 @@
 ## 0. Dosya düzeni (tek paket, hepsi repoda, düz klasör)
 ```
 index.html               panel (GitHub Pages yayınlar)
+manifest.webmanifest     panelin "uygulama" bilgisi (PWA: ad, simge, tam ekran)
+sw.js                    servis çalışanı (PWA: panel kabuğunu hafızada tutar, internet yokken boş ekran yerine açılır)
+icons/                   uygulama simgeleri (icon-192, icon-512, icon-maskable-512, apple-touch-icon)
 alici.ino                alıcı ESP32 kodu (COM3)
 secrets.example.h        secrets.h ÖRNEĞİ (gerçek secrets.h repoda YOK, sadece kullanıcının bilgisayarında)
 .gitignore               secrets.h dosyasının GitHub'a yüklenmesini engeller
@@ -68,8 +71,8 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 ## 6. Yazılım durumu
 | Parça | Dosya | Durum |
 |---|---|---|
-| Panel (web) | `index.html` | **v2 yayında ve çalışıyor** (kullanıcının ekran görüntüsüyle doğrulandı). Küçük düzeltme: siren süre listesi açıkken kendiliğinden sıfırlanmıyor (bu sürümde, GitHub'a yüklenmesi gerek). |
-| Alıcı kodu | `alici.ino` | **v3.6 hazır, henüz yüklenmedi** (v3: telefondan Wi-Fi kurulumu + ışık kontrolü; v3.5: ayarlanabilir otomatik susturma + zamanlama; v3.6: Telegram, izleme, düğme, nabız). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
+| Panel (web) | `index.html` + `manifest.webmanifest` + `sw.js` + `icons/` | v2 yayında ve çalışıyor. **Yeni (henüz yüklenmedi):** telefona uygulama olarak kurulum (PWA) ve **birden fazla zamanlama programı**. Bunlar için 4 yeni parça + değişen `index.html` GitHub'a yüklenmeli (bkz. 6e). |
+| Alıcı kodu | `alici.ino` | **v3.7 hazır, henüz yüklenmedi** (v3: telefondan Wi-Fi kurulumu + ışık kontrolü; v3.5: ayarlanabilir otomatik susturma + zamanlama; v3.6: Telegram, izleme, düğme, nabız; v3.7: birden fazla zamanlama programı. v3.6 da hiç yüklenmemişti, v3.7 hepsini birlikte getirir). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
 | Verici kodu | `verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
 v2 özellikleri (v3 ile panele **ayrı Siren ve Işık ayar kartları** eklendi. İkisinde de: Sürekli/Aralıklı mod, aralık süresi 0,1-60 sn (sayı kutusu), en fazla süre (saniye, boş/0 = sınırsız). Işıkta ek olarak: elle aç/kapat, alarmda otomatik yanma. Siren ve ışığın süreleri birbirinden bağımsızdır (siren süresi dolsa da alarm susturulana kadar ışık yanabilir)): panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
@@ -82,7 +85,7 @@ Panel düzeni: üstte durum, büyük "Alarmı sustur" butonu, iki büyük "Güve
 - **Otomatik susturma (alıcı v3.5):** Panel > Ayarlar > "Alarmı susturma": "Otomatik susturma açık" kutusu + **"Kaç saniye sonra kendiliğinden susturulsun?"** kutusu (kullanıcı kendi istediği saniyeyi yazar, örnek 30). **Süre yazılırsa** alarmdan o kadar saniye sonra "Alarmı sustur" kendiliğinden uygulanır. **Boş/0 ise** siren süresi ile alarm ışığı süresinden uzun olanı beklenir; siren süresi boş/0 ise veya alarmda ışık açıkken ışık süresi boş/0 ise otomatik susturma YOKTUR. Kutu kapatılırsa hiç susturulmaz (elle). "Alarmı sustur" butonunun altında geçerli süre yazar.
 - Uygulanınca siren ve ışık durur, `triggered` ve `siren` Firebase'de `false` olur, olay kaydına "Alarm kendiliğinden susturuldu" (`automute`) düşer. Sayaç alıcı kartında çalışır (internet/panel olmasa da). Her yeni alarm (tekrar çalma açıksa) sayacı baştan başlatır. Elle açılan ışık (Işığı aç) susturmadan etkilenmez.
 - **Susturma sesi:** panel, alarm susturulunca (elle veya kendiliğinden) kısa "bip-bip" çalar. Kutucuk (Siren ayarları): "Alarm susturulunca bu cihazda ses çalsın", varsayılan açık, her telefon/tarayıcı için ayrı (tarayıcı hafızası). Sayfa açık olmalı; tarayıcı dokunulmamış sekmede sesi engelleyebilir. Sistemi devre dışı bırakmak bip çalmaz.
-- **Zamanlama (v3.4):** Panel > Zamanlama kartı: "Sadece belirlediğim gün ve saatlerde koru" kutusu, başlangıç/bitiş saati, 7 gün düğmesi. Zamanlama dışındayken alıcı ESP-NOW alarmını yok sayar (siren çalmaz); panel "Zamanlama dışı" gösterir. Başlangıç = bitiş: seçili günlerde 24 saat. Başlangıç > bitiş: gece yarısını geçer (22:00–06:00; gün, aralığın başladığı güne göre seçilir). Saat NTP ile alınır, **Türkiye saati sabit UTC+3**. Saat alınamazsa koruma açık sayılır (güvenli taraf). Ana şalter "Güvenlik açık / Güvenlik kapalı" düğmeleridir; zamanlama onun içinde çalışır (sistem devre dışıysa zamanlama bir şey değiştirmez). Zamanlama dışına çıkılınca süren bir alarm kendiliğinden kesilmez.
+- **Zamanlama (v3.4, v3.7'de çoklu program):** Panel > Zamanlama kartı: "Sadece belirlediğim gün ve saatlerde koru" kutusu ve **en fazla 6 program** ("+ Program ekle"). Her programın başlangıç/bitiş saati, 7 gün düğmesi ve hızlı seçim düğmeleri (Hafta içi, Hafta sonu, Her gün) vardır; 2+ program varsa her birinde "Sil" çıkar. **Programlardan herhangi birinin içindeysen koruma devrededir** (birleşim). Her programın kuralı eskisiyle aynıdır (aşağıda). Hiçbir programın içinde değilken alıcı ESP-NOW alarmını yok sayar (siren çalmaz); panel "Zamanlama dışı" gösterir. Başlangıç = bitiş: seçili günlerde 24 saat. Başlangıç > bitiş: gece yarısını geçer (22:00–06:00; gün, aralığın başladığı güne göre seçilir). Saat NTP ile alınır, **Türkiye saati sabit UTC+3**. Saat alınamazsa koruma açık sayılır (güvenli taraf). Ana şalter "Güvenlik açık / Güvenlik kapalı" düğmeleridir; zamanlama onun içinde çalışır (sistem devre dışıysa zamanlama bir şey değiştirmez). Zamanlama dışına çıkılınca süren bir alarm kendiliğinden kesilmez.
 
 ## 6c. Bildirim, izleme, düğme (alıcı v3.6 + panel)
 - **Telegram bildirimi:** Alıcı kartı doğrudan Telegram'a mesaj yollar (sunucu gerekmez, panel kapalıyken de çalışır; alıcının internete bağlı olması gerekir). Mesaj gelen olaylar: alarm (20 sn'de en fazla bir), verici 100 sn görünmezse/geri gelirse, ışın `Işın kaç dk kesik kalırsa uyarılsın` süresinden uzun kesik kalırsa (varsayılan 10 dk, 0 = kapalı, ışın bağlı değilken de tetiklenir), alıcı açıldığında (neden: elektrik verildi / yeniden başlatıldı / voltaj düştü / yazılım hatası), alarm susturulunca (düğme veya otomatik). Bilgi Firebase'de `secret/telegram {token, chatId}`; alıcı 60 sn'de bir okur. Panel: Ayarlar > Bildirim ve izleme > Kaydet / Test mesajı / Sil. Kaydedilen değerler ekranda gösterilmez.
@@ -92,12 +95,21 @@ Panel düzeni: üstte durum, büyük "Alarmı sustur" butonu, iki büyük "Güve
 - **Düğmeyle sustur:** (1) Alıcı kartındaki **BOOT tuşuna kısa basış (1,5 sn'den kısa)** alarmı susturur (3 sn basılı tutmak hâlâ Wi-Fi sıfırlama). (2) İsteğe bağlı harici düğme: bir ucu **D14**, diğer ucu **GND** (elektrik kesikken bağlanır). İnternet olmasa da çalışır; sonra Firebase'e "mute / Alıcı düğmesi" yazılır. Alarm yokken basmak bir şey yapmaz.
 - **Elektrik kesintisi:** Yazılım tarafı: alıcı açılınca Telegram + olay kaydı ("boot"). Donanım önerisi (henüz yapılmadı): alıcı ve vericiyi küçük bir UPS/powerbank (şarj olurken çıkış verebilen) üzerinden beslemek; modem de aynı şekilde.
 
+## 6e. Telefona kurulum (PWA) ve çoklu zamanlama (18 Ekim gece)
+- **PWA:** Panel artık telefona uygulama olarak eklenebilir (ana ekran simgesi, tarayıcı çubuğu olmadan tam ekran). Panel > Ayarlar > **"Telefona kur"** kartı: Android Chrome'da "Ana ekrana ekle" düğmesi çıkar (çıkmazsa Chrome ⋮ menüsü > Uygulamayı yükle); iPhone'da Safari > Paylaş > Ana Ekrana Ekle (kartta yazar). Uygulama olarak açıkken kart "Kurulu ✓" der.
+- Servis çalışanı (`sw.js`): `index.html` önce ağdan alınır (hep güncel), ağ yoksa hafızadaki kopya açılır; simgeler ve Firebase betikleri (sürüm numaralı) hafızada tutulur. Canlı veri (alarm durumu) hafızaya hiç alınmaz. Dosyalar göreli yolla yazıldı, GitHub Pages'in `/bariyer-alarm/` alt yolunda çalışır.
+- **PWA bildirim YOK:** uygulama kapalıyken telefona bildirim (FCM) hâlâ sunucu gerektirir; uyarı için Telegram kullanılır (6c). Tarayıcı bildirimi sadece uygulama/sayfa açıkken gelir.
+- **Çoklu zamanlama:** bkz. 6a. Panel, alıcı yazılımı v3.7'den eskiyse ve 2+ program varsa Zamanlama kartında uyarı gösterir (eski alıcı sadece ilk programı uygular). Doğrulama: alıcı mantığı ve panel mantığı bilgisayarda aynı 9 gün/saat senaryosuyla denendi, ikisi de doğru. **Gerçek cihazda (alıcıya v3.7 yükleyip) henüz denenmedi.**
+- **Yüklenecek dosyalar (GitHub, tek tek):** `index.html` (değişti), `manifest.webmanifest`, `sw.js`, `icons/` içindeki 4 png (yeni; GitHub'da "Add file > Upload files" ile `icons` klasörüyle birlikte sürüklenebilir), `DURUM.md`, `README.md`. Alıcı için `alici.ino` (Arduino'dan COM3'e yükle). Verici değişmedi.
+- Panel yayına girince telefondaki eski sayfa bir kez yenilenmeyebilir; uygulamayı kapatıp açmak yeter.
+
 ## 6d. Güvenlik temizliği adımları (kullanıcı yapacak)
 1. Firebase > Authentication > Settings > User actions: **"Enable create (sign-up)" kapat** (en önemlisi).
 2. ESP hesabının şifresini değiştir: Firebase > Authentication > Users > `esp@bariyer.com` > Delete, sonra **Add user** ile aynı e-posta ve yeni uzun şifre. Sonra bilgisayardaki `secrets.h` içindeki `ESP_PASS`'ı güncelle ve `alici.ino`'yu COM3'e tekrar yükle.
 3. Modem Wi-Fi şifresini değiştir; alıcıyı BOOT 3 sn ile kurulum moduna alıp yeni şifreyi telefondan gir.
 4. GitHub'dan `secrets.h` dosyasını sil (repoda dosyayı aç > çöp kutusu simgesi > Commit). `.gitignore` ve `secrets.example.h` yüklenir. Not: dosya eski commit geçmişinde görünmeye devam eder; bu yüzden 2. ve 3. adım şart.
-5. Not: GitHub Pages ücretsiz hesapta sadece açık (public) repoda çalışır; repoyu gizli yapmak paneli kapatır, o yüzden gizli bilgiler repodan çıkarıldı.
+5. **Uyarı (18 Ekim):** yüklenen repo zip'inde `secrets.h` hâlâ vardı, yani GitHub'da silinmemiş olabilir. Madde 4'ü kontrol et.
+6. Not: GitHub Pages ücretsiz hesapta sadece açık (public) repoda çalışır; repoyu gizli yapmak paneli kapatır, o yüzden gizli bilgiler repodan çıkarıldı.
 
 ## 6b. Alıcıda telefondan Wi-Fi kurulumu (v3)
 - **Sıfırlama:** Alıcı ESP32 açıkken kart üzerindeki **BOOT** tuşuna **3 saniye** basılı tut (LED yanar, kart yeniden başlar). Kart açılırken BOOT'a basma (yükleme moduna girer).
@@ -114,7 +126,8 @@ alarm/   armed(bool) siren(bool) triggered(bool) lastTrigger(ms) test(bool) sire
          lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 100-60000) lightAlarm(bool, yoksa true) lightSeconds(sn, 0=alarm sürdüğü sürece)
          autoMuteOn(bool, yoksa true) autoMuteSeconds(sn, 0/boş=siren+ışık sürelerine göre)
          beamWarnMin(dk, yoksa 10, 0=kapalı) tgTest(bool, panelden Telegram testi)
-         schedOn(bool) schedStart(dk, gün başından) schedEnd(dk) schedDays(maske, bit0=Pzt..bit6=Paz, yoksa 127)
+         schedOn(bool) schedules(yazı: "başlangıç,bitiş,günler;başlangıç,bitiş,günler;...", dakika gün başından, günler maske bit0=Pzt..bit6=Paz; en fazla 6 program; örnek "1320,360,31;0,0,96" = hafta içi 22:00-06:00 + hafta sonu 24 saat)
+         schedStart(dk) schedEnd(dk) schedDays(maske) = ESKİ tek zamanlama alanları: `schedules` yoksa alıcı bunları kullanır; panel artık ikisini birlikte yazar (eski alanlara ilk program gider)
 secret/  telegram{token,chatId} ping{url}   (sadece giriş yapanlar okur; alıcı 60 sn'de bir okur)
 status/  alici{lastSeen,rssi,fw}  verici{lastSeen,contact}
 log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeout|light_on|light_off|boot|verici_offline|verici_online|beam_stuck
@@ -133,7 +146,8 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeo
 - ❌ Bariyer bağlanmadı, siren ve ışık yok
 
 ## 9. Sıradaki adımlar
-0. **Alıcıya v3.6 yükle** (COM3; `alici.ino` + `secrets.h` aynı klasörde) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonuç henüz bildirilmedi.
+0. **Alıcıya v3.7 yükle** (COM3; `alici.ino` + `secrets.h` aynı klasörde; v3.6'nın tüm özellikleri dahil) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonra panelde iki program ekleyip "Zamanlama dışı" / "Korunuyor" durumunun doğru değiştiğini kontrol et. Sonuç henüz bildirilmedi.
+0b. **Panel dosyalarını GitHub'a yükle** (6e'deki liste), sonra telefonda paneli açıp "Telefona kur" kartından ana ekrana ekle.
 1. **Bariyeri vericiye bağla** (kılavuza göre terminaller belli): bariyerin ALICI biriminde ③ COM → verici ESP32 GND, ④ NC → verici D27. Kullanıcı jumper kablonun bir ucunu kesip soyarak vidalı terminale takacak. Verici USB şarj adaptörüyle beslenecek. Önce elektrik kapalı bağlanır.
 2. Panelde "Bariyer ışını: Normal" görünmeli (ışınlar hizalıyken). Ters görünürse NC/NO karışmıştır.
 3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
@@ -147,5 +161,5 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeo
 - Alıcı internetsizken panel bilgisi güncellenmez; siren yine çalar, siren süre sınırıyla kendiliğinden susar.
 - Siren/alarm, panelden susturmak veya otomatik susturma süresinin dolmasıyla dışında ancak elektriği keserek susturulur (fiziksel sustur butonu yok).
 - Alıcı çevrimdışı uyarısı dış izleme servisi (nabız) olmadan mümkün değil. Telegram mesajı alıcının internetine bağlıdır.
-- Zamanlama saati sabit Türkiye saatidir (UTC+3, yaz/kış saati yok). Alıcı açılışta internetten saati almadan zamanlama uygulayamaz (o sürede koruma açık kalır).
+- Zamanlama programı sayısı en fazla 6'dır. Zamanlama saati sabit Türkiye saatidir (UTC+3, yaz/kış saati yok). Alıcı açılışta internetten saati almadan zamanlama uygulayamaz (o sürede koruma açık kalır).
 - ESP-NOW menzili açık alanda yaklaşık 50-100 m.
