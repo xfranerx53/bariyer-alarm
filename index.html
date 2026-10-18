@@ -123,28 +123,35 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
   </div>
 
   <div class="card">
-    <h2>Test ve ayar</h2>
+    <h2>Siren ayarları</h2>
     <button id="test" class="alt">Siren testi (3 saniye)</button>
-    <div class="small" style="margin-top:8px">Alıcıdaki röleyi 3 saniye çalıştırır. Alarm kaydına yazılmaz, sadece işlem geçmişine eklenir.</div>
-    <label class="small" for="dur" style="display:block;margin-top:14px">Siren en fazla ne kadar çalsın?</label>
-    <select id="dur">
-      <option value="30">30 saniye</option>
-      <option value="60">1 dakika</option>
-      <option value="120">2 dakika</option>
-      <option value="300">5 dakika</option>
-      <option value="600">10 dakika</option>
-      <option value="0">Ben susturana kadar</option>
-    </select>
-    <div class="sep"></div>
-    <h2>Işık kontrolü</h2>
+    <div class="small" style="margin-top:8px">Alıcıdaki röleyi 3 saniye çalıştırır. Işık da alarmda yansın seçiliyse o da yanar.</div>
+    <label class="small" style="display:block;margin-top:14px">Çalışma şekli</label>
+    <div class="two"><button id="sSteady" class="alt">Sürekli</button><button id="sBlink" class="alt">Aralıklı</button></div>
+    <label class="small" for="sirenMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi (saniye, en az 0,1)</label>
+    <input id="sirenMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1">
+    <div class="small">Siren yazdığın süre kadar çalar, aynı süre kadar susar.</div>
+    <label class="small" for="sirenSec" style="display:block;margin-top:12px">Siren en fazla ne kadar çalsın? (saniye)</label>
+    <input id="sirenSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = ben susturana kadar">
+    <div class="small">Boş bırakırsan veya 0 yazarsan siren sen susturana kadar çalar.</div>
+  </div>
+
+  <div class="card">
+    <h2>Işık ayarları</h2>
     <button id="lightBtn" class="alt">Işığı aç</button>
-    <label class="small" style="display:block;margin-top:12px">Çalışma şekli</label>
+    <label class="small" style="display:block;margin-top:14px">Çalışma şekli</label>
     <div class="two"><button id="mSteady" class="alt">Sürekli</button><button id="mBlink" class="alt">Aralıklı</button></div>
     <label class="small" for="lightMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi (saniye, en az 0,1)</label>
-    <input id="lightMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1" placeholder="saniye">
-    <div class="small">Işık yazdığın süre kadar yanar, aynı süre kadar söner. Örnek: 0,1 / 0,5 / 1 / 2,5. En fazla 60 saniye. Çok kısa süreler rölenin tık sesini sıklaştırır ve rölenin ömrünü kısaltır.</div>
+    <input id="lightMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1">
+    <div class="small">Işık yazdığın süre kadar yanar, aynı süre kadar söner. Çok kısa süreler rölenin ömrünü kısaltır.</div>
     <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="lightAlarm" style="width:auto;margin:0;padding:0"> Alarm olunca ışık kendiliğinden yansın</label>
-    <div class="sep"></div>
+    <label class="small" for="lightSec" style="display:block;margin-top:12px">Alarmda ışık en fazla ne kadar yansın? (saniye)</label>
+    <input id="lightSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = alarm sürdüğü sürece">
+    <div class="small">Boş bırakırsan ışık alarm susturulana kadar yanar. Elle açtığın ışık bu süreden etkilenmez.</div>
+  </div>
+
+  <div class="card">
+    <h2>Bildirim</h2>
     <button class="alt" id="notif">Bildirimleri aç</button>
     <div class="small" style="margin-top:8px">Bildirim sadece bu sayfa açıkken gelir (sekme arka planda olabilir).</div>
   </div>
@@ -202,7 +209,7 @@ async function act(type, updates){
     return true;
   }catch(e){ toast("İşlem başarısız. Bağlantını kontrol et."); return false; }
 }
-$("mute").onclick = async () => { if(await act("mute",{siren:false,triggered:false})) toast("Siren susturuldu"); };
+$("mute").onclick = async () => { if(await act("mute",{siren:false,triggered:false})) toast("Alarm susturuldu"); };
 $("arm").onclick = async () => {
   if(alarm.armed && !confirm("Sistemi devre dışı bırakmak istediğine emin misin? Işın kesilse bile alarm çalmaz.")) return;
   const on = !alarm.armed;
@@ -211,43 +218,69 @@ $("arm").onclick = async () => {
 $("test").onclick = async () => {
   if(await act("test",{test:true})) toast("Test komutu gönderildi. Alıcıda röle tıklamalı.");
 };
-$("dur").onchange = async e => {
-  try{ await update(ref(db,"alarm"),{sirenSeconds:Number(e.target.value)}); toast("Siren süresi kaydedildi"); }
-  catch(_){ toast("Kaydedilemedi"); }
-};
 $("notif").onclick = async () => {
   if(!("Notification" in window)) return toast("Bu tarayıcı bildirimi desteklemiyor");
   const p = await Notification.requestPermission();
   toast(p==="granted" ? "Bildirimler açık" : "Bildirim izni verilmedi");
 };
 
-/* ---------- ışık ---------- */
-async function setLight(u){
+/* ---------- siren ve ışık ayarları ---------- */
+async function setCfg(u){
   try{ await update(ref(db,"alarm"),u); toast("Kaydedildi"); }
   catch(_){ toast("Kaydedilemedi"); }
 }
+function num(v){ return parseFloat(String(v).trim().replace(",", ".")); }
+function intervalChange(e, key){            // aralık: en az 0,1 sn, en fazla 60 sn
+  const v = num(e.target.value);
+  if(!isFinite(v) || v < 0.1){ toast("En az 0,1 saniye olmalı"); e.target.value = (alarm[key]||1000)/1000; return; }
+  const ms = Math.round(Math.min(v,60)*10)*100;
+  e.target.value = ms/1000;
+  setCfg({[key]: ms});
+}
+function limitChange(e, key){               // en fazla süre: boş veya 0 = sınırsız
+  const raw = String(e.target.value).trim();
+  let s = 0;
+  if(raw !== ""){
+    const v = num(raw);
+    if(!isFinite(v) || v < 0){ toast("Geçerli bir sayı yaz"); return; }
+    s = Math.min(Math.round(v), 86400);
+  }
+  e.target.value = s ? s : "";
+  setCfg({[key]: s});
+}
+$("sSteady").onclick = () => setCfg({sirenMode:"steady"});
+$("sBlink").onclick  = () => setCfg({sirenMode:"blink"});
+$("sirenMs").onchange  = e => intervalChange(e,"sirenMs");
+$("sirenSec").onchange = e => limitChange(e,"sirenSeconds");
+
 $("lightBtn").onclick = async () => {
   const on = !alarm.lightOn;
   if(await act(on?"light_on":"light_off",{lightOn:on})) toast(on?"Işık açıldı":"Işık kapatıldı");
 };
-$("mSteady").onclick = () => setLight({lightMode:"steady"});
-$("mBlink").onclick  = () => setLight({lightMode:"blink"});
-$("lightMs").onchange = e => {
-  const v = parseFloat(String(e.target.value).replace(",", "."));
-  if(!isFinite(v) || v < 0.1){ toast("En az 0,1 saniye olmalı"); e.target.value = (alarm.lightMs||1000)/1000; return; }
-  const ms = Math.round(Math.min(v, 60) * 10) * 100;   // 0,1 sn adımlarla, en fazla 60 sn
-  e.target.value = ms/1000;
-  setLight({lightMs: ms});
-};
-$("lightAlarm").onchange = e => setLight({lightAlarm:e.target.checked});
-function renderLight(){
+$("mSteady").onclick = () => setCfg({lightMode:"steady"});
+$("mBlink").onclick  = () => setCfg({lightMode:"blink"});
+$("lightMs").onchange  = e => intervalChange(e,"lightMs");
+$("lightSec").onchange = e => limitChange(e,"lightSeconds");
+$("lightAlarm").onchange = e => setCfg({lightAlarm:e.target.checked});
+
+function setVal(id, v){ const el=$(id); if(document.activeElement !== el) el.value = v; }
+function renderSettings(){
+  const sBlink = alarm.sirenMode==="blink";
+  $("sBlink").className  = sBlink ? "" : "alt";
+  $("sSteady").className = sBlink ? "alt" : "";
+  $("sirenMs").disabled = !sBlink;
+  setVal("sirenMs", (alarm.sirenMs || 1000)/1000);
+  const ss = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
+  setVal("sirenSec", ss ? ss : "");
+
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
   $("lightBtn").textContent = on ? "Işığı kapat" : "Işığı aç";
   $("lightBtn").className = on ? "" : "alt";
-  $("mBlink").className = blink ? "" : "alt";
+  $("mBlink").className  = blink ? "" : "alt";
   $("mSteady").className = blink ? "alt" : "";
   $("lightMs").disabled = !blink;
-  if(document.activeElement !== $("lightMs")) $("lightMs").value = String((alarm.lightMs || 1000) / 1000);
+  setVal("lightMs", (alarm.lightMs || 1000)/1000);
+  setVal("lightSec", alarm.lightSeconds ? alarm.lightSeconds : "");
   if(document.activeElement !== $("lightAlarm")) $("lightAlarm").checked = alarm.lightAlarm !== false;
 }
 
@@ -284,18 +317,17 @@ function renderHero(){
   const hero=$("hero");
   let cls="off", dot="…", txt="Yükleniyor";
   if(alarm.siren){ cls="bad"; dot="🚨"; txt="ALARM ÇALIYOR"; }
+  else if(alarm.triggered){ cls="bad"; dot="🚨"; txt="Alarm verildi (susturulmadı)"; }
   else if(alarm.armed===false){ cls="off"; dot="⏸"; txt="Devre dışı"; }
   else if(alarm.armed===true){ cls="ok"; dot="✓"; txt="Korunuyor"; }
   hero.className="card hero "+cls; $("dot").textContent=dot; $("state").textContent=txt;
   $("last").textContent = alarm.lastTrigger ? "Son alarm: "+ago(alarm.lastTrigger)+" ("+clock(alarm.lastTrigger)+")" : "Henüz alarm yok";
   document.title = alarm.siren ? "🚨 ALARM – Bariyer" : "Bariyer Alarm";
-  $("mute").disabled = !alarm.siren;
-  $("mute").textContent = alarm.siren ? "Sireni sustur" : "Siren çalmıyor";
+  const active = !!(alarm.siren || alarm.triggered);
+  $("mute").disabled = !active;
+  $("mute").textContent = active ? "Alarmı sustur" : "Alarm yok";
   $("arm").textContent = alarm.armed ? "Sistemi devre dışı bırak" : "Sistemi etkinleştir";
-  if(document.activeElement !== $("dur")){   // kullanıcı listeyi açıkken değeri bozma
-    $("dur").value = String(alarm.sirenSeconds !== undefined ? alarm.sirenSeconds : 60);
-  }
-  renderLight();
+  renderSettings();
 }
 
 function renderDevices(){
@@ -323,7 +355,7 @@ function renderDevices(){
 }
 
 const LABEL = {
-  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Siren susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
+  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Alarm susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
   disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"],
   light_on:["💡","Işık açıldı"], light_off:["🌑","Işık kapatıldı"]
 };

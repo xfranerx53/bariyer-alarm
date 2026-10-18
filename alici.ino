@@ -5,7 +5,7 @@
 //            kart "Bariyer-Alici-Kurulum" adında kendi Wi-Fi ağını açar, telefondan bağlanıp
 //            yeni Wi-Fi bilgisi girilir.
 // Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
-// Işık: panelden aç/kapat, sürekli veya aralıklı (yanıp sönme), alarmda otomatik yanma.
+// Siren ve ışık ayrı ayrı ayarlanır: sürekli/aralıklı, aralık süresi, en fazla süre (panelden).
 // Wi-Fi ve ESP şifresi aynı klasördeki secrets.h dosyasındadır (ilk açılışta kullanılır).
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -53,18 +53,18 @@ bool wasOn = false;
 unsigned long sirenStart = 0, lastStatus = 0, lastMacPrint = 0;
 int sirenSeconds = 60;               // panelden ayarlanır, 0 = susturana kadar
 
-// Işık (röle kanal 2, D25) ayarları: panelden gelir
+// Siren ve ışık ayarları (ikisi birbirinden bağımsız, panelden gelir)
+volatile bool alarmActive = false;       // alarm verildi ve henüz susturulmadı (siren süresi dolsa da sürer)
+volatile bool sirenBlink = false;        // false = sürekli, true = aralıklı
+volatile unsigned long sirenMs = 1000;   // aralıklı modda çalma/susma süresi (ms)
 volatile bool lightManual = false;       // panelden "Işığı aç"
 volatile bool lightBlink = false;        // false = sürekli, true = aralıklı
 volatile bool lightWithAlarm = true;     // alarmda ışık kendiliğinden yansın
 volatile unsigned long lightMs = 1000;   // aralıklı modda yanma/sönme süresi (ms)
+volatile int lightSeconds = 0;           // alarmda ışık en fazla kaç sn yansın, 0 = alarm sürdüğü sürece
 
 // ---------------------------------------------------------------- röle
 void relay(int pin, bool on) { digitalWrite(pin, (on != ACTIVE_LOW) ? HIGH : LOW); }
-void applyRelay() {
-  bool testActive = (long)(testUntil - millis()) > 0;
-  relay(SIREN_PIN, sirenOn || testActive);
-}
 
 // ---------------------------------------------------------------- ESP-NOW
 void handleMsg(const uint8_t* data, int len) {
@@ -72,7 +72,7 @@ void handleMsg(const uint8_t* data, int len) {
   Msg m; memcpy(&m, data, sizeof(m));
   if (m.magic != MAGIC) return;
   if (m.type == T_ALARM) {
-    if (armed) { sirenOn = true; applyRelay(); fbPending = true; }
+    if (armed) { sirenOn = true; alarmActive = true; fbPending = true; }
   } else if (m.type == T_BEAT) {
     vContact = m.contact; vSeen = true;
   }
@@ -130,17 +130,32 @@ void uiTask(void*) {
   }
 }
 
-// Işığı ayrı bir görev yönetir: ağ işlemleri sırasında bile yanıp sönme düzgün kalır
-void lightTask(void*) {
+// Siren ve ışık rölelerini ayrı bir görev yönetir: ağ işlemleri sırasında bile
+// yanıp sönme düzgün kalır ve alarm gelince röle hemen çeker.
+void outputTask(void*) {
+  bool prevAlarm = false;
+  unsigned long alarmStart = 0;
   for (;;) {
-    bool alarmNow = sirenOn || ((long)(testUntil - millis()) > 0);
-    bool want = lightManual || (lightWithAlarm && alarmNow);
-    bool out = want;
-    if (want && lightBlink) {
-      unsigned long ms = lightMs < 100 ? 100 : lightMs;
-      out = ((millis() / ms) % 2) == 0;
+    unsigned long now = millis();
+    bool testActive = (long)(testUntil - now) > 0;
+
+    // SIREN
+    bool sOut = sirenOn || testActive;
+    if (sOut && sirenBlink) { unsigned long ms = sirenMs < 100 ? 100 : sirenMs; sOut = ((now / ms) % 2) == 0; }
+    relay(SIREN_PIN, sOut);
+
+    // IŞIK
+    if (alarmActive && !prevAlarm) alarmStart = now;
+    prevAlarm = alarmActive;
+    bool aLight = false;
+    if (lightWithAlarm) {
+      if (alarmActive) aLight = (lightSeconds <= 0) || (now - alarmStart <= (unsigned long)lightSeconds * 1000UL);
+      if (testActive) aLight = true;
     }
-    relay(LIGHT_PIN, out);
+    bool lOut = lightManual || aLight;
+    if (lOut && lightBlink) { unsigned long ms = lightMs < 100 ? 100 : lightMs; lOut = ((now / ms) % 2) == 0; }
+    relay(LIGHT_PIN, lOut);
+
     vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 }
@@ -286,7 +301,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
   initEspNow();
   xTaskCreate(uiTask, "ui", 4096, NULL, 1, NULL);
-  xTaskCreate(lightTask, "light", 2048, NULL, 1, NULL);
+  xTaskCreate(outputTask, "out", 3072, NULL, 1, NULL);
 
   Serial.print("ALICI MAC: ");
   Serial.println(WiFi.macAddress());
@@ -311,7 +326,7 @@ void sirenLogic() {
     offPending = true;
     Serial.println("Siren suresi doldu, kapatildi");
   }
-  applyRelay();
+  
 }
 
 void loop() {
@@ -363,6 +378,14 @@ void loop() {
       bool fbSiren = r.indexOf("\"siren\":true") >= 0;
       int i = r.indexOf("\"sirenSeconds\":");
       sirenSeconds = (i >= 0) ? r.substring(i + 15).toInt() : 60;
+      sirenBlink = r.indexOf("\"sirenMode\":\"blink\"") >= 0;
+      int k = r.indexOf("\"sirenMs\":");
+      long sms = (k >= 0) ? r.substring(k + 10).toInt() : 1000;
+      if (sms < 100) sms = 100;
+      if (sms > 60000) sms = 60000;
+      sirenMs = sms;
+      int q = r.indexOf("\"lightSeconds\":");
+      lightSeconds = (q >= 0) ? r.substring(q + 15).toInt() : 0;
       lightManual = r.indexOf("\"lightOn\":true") >= 0;
       lightBlink = r.indexOf("\"lightMode\":\"blink\"") >= 0;
       lightWithAlarm = r.indexOf("\"lightAlarm\":false") < 0;
@@ -376,7 +399,8 @@ void loop() {
         Serial.println("PANEL TESTI: siren 3 sn");
         dbPatch("/alarm", "{\"test\":false}");
       }
-      if (!fbPending && !offPending) sirenOn = fbSiren;   // yazılmamış yerel alarmın üzerine yazma
+      bool fbTrig = r.indexOf("\"triggered\":true") >= 0;
+      if (!fbPending && !offPending) { sirenOn = fbSiren; alarmActive = fbTrig; }   // yazılmamış yerel alarmın üzerine yazma
       Serial.println(sirenOn ? "SIREN ACIK" : "siren kapali");
     }
     // 4) Cihaz durumunu panele bildir (20 sn'de bir)
@@ -390,6 +414,6 @@ void loop() {
       if (dbPatch("/status", j)) lastStatus = millis();
     }
   }
-  applyRelay();
+  
   delay(1000);
 }
