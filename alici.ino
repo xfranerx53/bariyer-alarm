@@ -1,9 +1,11 @@
-// ALICI (ESP32 #2)  |  Sürüm 3.2
+// ALICI (ESP32 #2)  |  Sürüm 3.3
 // Görevi: vericiden ESP-NOW ile alarm almak, siren rölesini çekmek,
 // Firebase'e bildirmek, panelden gelen komutları (sustur, test, süre, devre dışı) uygulamak.
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
 //            kart "Bariyer-Alici-Kurulum" adında kendi Wi-Fi ağını açar, telefondan bağlanıp
 //            yeni Wi-Fi bilgisi girilir.
+// YENİ (v3.3): Otomatik susturma. Panelde "Alarm kendiliğinden susturulsun" süresi yazılırsa, alarm
+//            sen butona basmasan bile o süre sonunda susturulur (siren+ışık durur, alarm durumu temizlenir).
 // Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
 // Siren ve ışık ayrı ayrı ayarlanır: sürekli/aralıklı, aralık süresi, en fazla süre (panelden).
 // Wi-Fi ve ESP şifresi aynı klasördeki secrets.h dosyasındadır (ilk açılışta kullanılır).
@@ -17,7 +19,7 @@
 #include "secrets.h"
 
 const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
-const char* FW = "3.2";                 // yazılım sürümü (panelde görünür)
+const char* FW = "3.3";                 // yazılım sürümü (panelde görünür)
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
@@ -52,6 +54,9 @@ volatile uint8_t vContact = 0;       // 1 = bariyer kontağı açık
 volatile unsigned long testUntil = 0;
 unsigned long lastStatus = 0, lastMacPrint = 0;
 volatile int sirenSeconds = 60;      // panelden ayarlanır, 0 = susturana kadar
+volatile int autoMuteSeconds = 0;    // alarm bu süre sonunda kendiliğinden susturulur, 0 = kapalı (panelden)
+volatile unsigned long alarmSeq = 0; // kabul edilen her yeni alarmda artar (otomatik susturma sayacını yeniler)
+volatile bool mutePending = false;   // otomatik susturuldu, Firebase'e yazılacak
 
 // Siren ve ışık ayarları (ikisi birbirinden bağımsız, panelden gelir)
 volatile bool sirenRepeat = true;        // bariyer tekrar kesilirse siren yeniden çalsın (panelden)
@@ -77,7 +82,7 @@ void handleMsg(const uint8_t* data, int len) {
   if (m.type == T_ALARM) {
     rxAlarms++;
     if (armed) {
-      if (!alarmActive || sirenRepeat) { sirenOn = true; alarmActive = true; fbPending = true; }
+      if (!alarmActive || sirenRepeat) { sirenOn = true; alarmActive = true; fbPending = true; alarmSeq++; }
       else ignoredAlarms++;     // aynı alarm içinde tekrar kesinti: siren yeniden çalmaz
     }
   } else if (m.type == T_BEAT) {
@@ -140,11 +145,21 @@ void uiTask(void*) {
 // Siren ve ışık rölelerini ayrı bir görev yönetir: ağ işlemleri sırasında bile
 // yanıp sönme düzgün kalır ve alarm gelince röle hemen çeker.
 void outputTask(void*) {
-  bool prevAlarm = false, prevSiren = false;
-  unsigned long alarmStart = 0, sirenStartT = 0;
+  bool prevAlarm = false, prevSiren = false, prevAuto = false;
+  unsigned long alarmStart = 0, sirenStartT = 0, autoStart = 0, seenSeq = 0;
   for (;;) {
     unsigned long now = millis();
     bool testActive = (long)(testUntil - now) > 0;
+
+    // Otomatik susturma: alarm verildi, süre doldu, butona basılmadı -> kendiliğinden sustur
+    if (alarmActive && (!prevAuto || alarmSeq != seenSeq)) autoStart = now;   // yeni alarm: sayaç baştan
+    prevAuto = alarmActive; seenSeq = alarmSeq;
+    if (alarmActive && autoMuteSeconds > 0 && now - autoStart >= (unsigned long)autoMuteSeconds * 1000UL) {
+      mutePending = true;     // önce bayrak, sonra kapat (ana döngü araya girip geri açmasın)
+      alarmActive = false;
+      sirenOn = false;
+      prevAuto = false;
+    }
 
     // Siren süre sınırı (20 ms hassasiyet, internet olmasa da çalışır)
     if (sirenOn && !prevSiren) sirenStartT = now;
@@ -374,6 +389,11 @@ void loop() {
     if (offPending) {
       if (dbPatch("/alarm", "{\"siren\":false}")) { offPending = false; logEvent("timeout", "alici"); }
     }
+    // 2b) Otomatik susturuldu: Firebase'de de alarmı temizle (bu arada yeni alarm geldiyse yazma)
+    if (mutePending) {
+      if (alarmActive) mutePending = false;
+      else if (dbPatch("/alarm", "{\"siren\":false,\"triggered\":false}")) { mutePending = false; logEvent("automute", "alici"); }
+    }
     // 3) Panel durumunu oku
     String r = dbGet("/alarm");
     if (r != "") {
@@ -381,6 +401,8 @@ void loop() {
       bool fbSiren = r.indexOf("\"siren\":true") >= 0;
       int i = r.indexOf("\"sirenSeconds\":");
       sirenSeconds = (i >= 0) ? r.substring(i + 15).toInt() : 60;
+      int am = r.indexOf("\"autoMuteSeconds\":");
+      autoMuteSeconds = (am >= 0) ? r.substring(am + 18).toInt() : 0;
       sirenRepeat = r.indexOf("\"sirenRepeat\":false") < 0;
       sirenBlink = r.indexOf("\"sirenMode\":\"blink\"") >= 0;
       int k = r.indexOf("\"sirenMs\":");
@@ -405,7 +427,7 @@ void loop() {
         dbPatch("/alarm", "{\"test\":false}");
       }
       bool fbTrig = r.indexOf("\"triggered\":true") >= 0;
-      if (!fbPending && !offPending) { sirenOn = fbSiren; alarmActive = fbTrig; }   // yazılmamış yerel alarmın üzerine yazma
+      if (!fbPending && !offPending && !mutePending) { sirenOn = fbSiren; alarmActive = fbTrig; }   // yazılmamış yerel alarmın üzerine yazma
       Serial.println(sirenOn ? "SIREN ACIK" : "siren kapali");
     }
     // 4) Cihaz durumunu panele bildir (20 sn'de bir)

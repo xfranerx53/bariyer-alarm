@@ -1,18 +1,19 @@
-# DURUM (Son güncelleme: 17 Ekim 2026, akşam)
+# DURUM (Son güncelleme: 18 Ekim 2026)
 
 > **Yeni bir Claude sohbetine başlıyorsan:** Bu repo zip'ini sohbete yükle. Claude bu dosyayı okuyup kaldığımız yerden devam eder.
 > **Claude için kural:** Her cevabın sonunda güncel `DURUM.md` dosyasını ver. Kullanıcı bunu GitHub'a yükleyecek.
 
-## 0. Dosya düzeni (tek paket, hepsi repoda)
+## 0. Dosya düzeni (tek paket, hepsi repoda, düz klasör)
 ```
-index.html            panel (GitHub Pages yayınlar)
-docs/ABT-I100-MANUAL.pdf   bariyerin kullanım kılavuzu
-alici/alici.ino       alıcı ESP32 kodu (COM3)  + alici/secrets.h (Wi-Fi/ESP şifresi)
-verici/verici.ino     verici ESP32 kodu (COM6)
-DURUM.md              bu dosya
+index.html               panel (GitHub Pages yayınlar)
+alici.ino + secrets.h    alıcı ESP32 kodu (COM3) + Wi-Fi/ESP şifresi
+verici.ino               verici ESP32 kodu (COM6)
+database.rules.json      Firebase Realtime Database kuralları (Firebase konsoluna yapıştırılan kopya)
+ABT-I100-MANUAL.pdf      bariyerin kullanım kılavuzu
+DURUM.md                 bu dosya
 README.md
 ```
-Kullanıcı tek zip'i açıp içindekileri GitHub'a sürükleyerek yüklüyor. `alici` ve `verici` klasörleri Arduino IDE'de doğrudan açılabilir (klasör adı = .ino adı olmalı).
+Kullanıcı dosyaları tek tek GitHub'a yüklüyor (zip değil; değişen dosyalar tek tek verilir). Arduino IDE'de `.ino` dosyası kendi adındaki klasörde olmalı (`alici/alici.ino`, `verici/verici.ino`) ve `secrets.h` alici.ino ile aynı klasörde durmalı.
 
 ## 1. Kullanıcı ve çalışma şekli
 - Kullanıcı artık **hem yazılımı hem donanım bağlantılarını tek başına** yapıyor (daha önce donanımı başka biri yapıyordu, o kişi projeden ayrıldı). Kablolama tariflerini doğrudan kullanıcıya, her kabloyu tek tek, hangi uçtan hangi uca gittiğini yazarak ver. Her bağlantıdan önce "elektriği kes" hatırlat.
@@ -39,7 +40,7 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 - GitHub: `xfranerx53/bariyer-alarm`, panel: https://xfranerx53.github.io/bariyer-alarm/
 - Firebase proje: `bariyer-alarm`, Realtime Database: `https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app`
 - Firebase kullanıcıları: panel girişi `ferhatbostan53@gmail.com`, ESP'ler için `esp@bariyer.com`
-- Kurallar: `.read` ve `.write` = `auth != null` (sadece giriş yapanlar)
+- Kurallar: `.read` ve `.write` = `auth != null` (sadece giriş yapanlar). Aynısı repoda **`database.rules.json`** dosyasında durur. Kural değişirse hem Firebase konsolunda (Realtime Database > Kurallar > Yayınla) hem bu dosyada güncellenmeli; yeni sohbette tekrar anlatmaya gerek yok.
 - Wi-Fi ve ESP şifreleri `alici/secrets.h` dosyasında ve **repoya dahil** (kullanıcı bilinçli olarak böyle istedi, güvenlik sorununu sonra kendisi ayarlayacak). Repo herkese açıksa bu bilgiler görünür; kullanıcıya bir kez hatırlat, ısrar etme.
 - Önerilen: `esp@bariyer.com` şifresi zayıf (kısa), Wi-Fi şifresi de sohbette paylaşıldı. İleride değiştirilirse `secrets.h` güncellenip alıcıya tekrar yüklenmeli.
 
@@ -66,12 +67,19 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 | Parça | Dosya | Durum |
 |---|---|---|
 | Panel (web) | `index.html` | **v2 yayında ve çalışıyor** (kullanıcının ekran görüntüsüyle doğrulandı). Küçük düzeltme: siren süre listesi açıkken kendiliğinden sıfırlanmıyor (bu sürümde, GitHub'a yüklenmesi gerek). |
-| Alıcı kodu | `alici/alici.ino` | **v3 hazır, henüz yüklenmedi** (telefondan Wi-Fi kurulumu + ışık kontrolü eklendi). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
-| Verici kodu | `verici/verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
+| Alıcı kodu | `alici.ino` | **v3.3 hazır, henüz yüklenmedi** (v3: telefondan Wi-Fi kurulumu + ışık kontrolü; v3.3: otomatik susturma). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
+| Verici kodu | `verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
 v2 özellikleri (v3 ile panele **ayrı Siren ve Işık ayar kartları** eklendi. İkisinde de: Sürekli/Aralıklı mod, aralık süresi 0,1-60 sn (sayı kutusu), en fazla süre (saniye, boş/0 = sınırsız). Işıkta ek olarak: elle aç/kapat, alarmda otomatik yanma. Siren ve ışığın süreleri birbirinden bağımsızdır (siren süresi dolsa da alarm susturulana kadar ışık yanabilir)): panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
 
 Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
+
+## 6a. Otomatik susturma ve susturma sesi (v3.3 alıcı + panel)
+- Panel > Siren ayarları: **"Alarm kendiliğinden susturulsun (saniye)"** kutusu. Boş/0 = kapalı (eski davranış: alarm sen butona basana kadar "susturulmadı" kalır). Süre yazılırsa, alarm butona basılmasa bile o süre sonunda **susturuldu** olur: siren ve ışık durur, `triggered` ve `siren` Firebase'de `false` olur, olay kaydına "Alarm kendiliğinden susturuldu" (`automute`) düşer.
+- Sayaç **alıcı kartında** çalışır (internet/panel olmasa da). Ayarın okunması için alıcının internete bağlı olması gerekir; bir kez okunduktan sonra internet kopsa bile geçerlidir. Her yeni alarm (tekrar çalma açıksa) sayacı baştan başlatır.
+- Siren süre sınırından farkı: siren süre sınırı sadece sireni durdurur, alarm "susturulmadı" kalır. Otomatik susturma alarm durumunun kendisini de kapatır. İkisi bağımsız ayarlanır (otomatik susturma süresi siren süresinden kısaysa siren de o anda durur).
+- **Susturma sesi:** panel, alarm susturulunca (elle veya kendiliğinden) kısa bir "bip-bip" çalar. Kutucuk: "Alarm susturulunca bu cihazda ses çalsın" (varsayılan açık, her telefon/tarayıcı için ayrı, tarayıcı hafızasında). Sayfa açık olmalı; tarayıcı, hiç dokunulmamış sekmede sesi engelleyebilir (ilk dokunuştan sonra çalışır).
+- Sistemi devre dışı bırakmak bip çalmaz (sadece alarm susturulunca çalar).
 
 ## 6b. Alıcıda telefondan Wi-Fi kurulumu (v3)
 - **Sıfırlama:** Alıcı ESP32 açıkken kart üzerindeki **BOOT** tuşuna **3 saniye** basılı tut (LED yanar, kart yeniden başlar). Kart açılırken BOOT'a basma (yükleme moduna girer).
@@ -86,8 +94,9 @@ Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod d
 alarm/   armed(bool) siren(bool) triggered(bool) lastTrigger(ms) test(bool) sirenSeconds(sayı)
          sirenRepeat(bool, yoksa true) sirenMode("steady"|"blink") sirenMs(ms, 100-60000) sirenSeconds(sn, 0/boş=susturana kadar, yoksa 60)
          lightOn(bool) lightMode("steady"|"blink") lightMs(ms, 100-60000) lightAlarm(bool, yoksa true) lightSeconds(sn, 0=alarm sürdüğü sürece)
+         autoMuteSeconds(sn, 0/boş=kendiliğinden susturma yok)
 status/  alici{lastSeen,rssi,fw}  verici{lastSeen,contact}
-log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
+log/     <otomatik>{type,by,t}   type: alarm|mute|automute|arm|disarm|test|timeout|light_on|light_off
 ```
 `test`, `sirenSeconds`, `status`, `log` ilk kullanımda kendiliğinden oluşur, elle eklemek gerekmez.
 
@@ -103,7 +112,7 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 - ❌ Bariyer bağlanmadı, siren ve ışık yok
 
 ## 9. Sıradaki adımlar
-0. **Alıcıya v3 yükle** (COM3) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonuç henüz bildirilmedi.
+0. **Alıcıya v3.3 yükle** (COM3; `alici.ino` + `secrets.h` aynı klasörde) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonuç henüz bildirilmedi.
 1. **Bariyeri vericiye bağla** (kılavuza göre terminaller belli): bariyerin ALICI biriminde ③ COM → verici ESP32 GND, ④ NC → verici D27. Kullanıcı jumper kablonun bir ucunu kesip soyarak vidalı terminale takacak. Verici USB şarj adaptörüyle beslenecek. Önce elektrik kapalı bağlanır.
 2. Panelde "Bariyer ışını: Normal" görünmeli (ışınlar hizalıyken). Ters görünürse NC/NO karışmıştır.
 3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
@@ -115,5 +124,5 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 
 ## 10. Bilinen sınırlar
 - Alıcı internetsizken panel bilgisi güncellenmez; siren yine çalar, siren süre sınırıyla kendiliğinden susar.
-- Alıcı sirenin susturulması için panel veya elektriği kesmek gerekir (fiziksel sustur butonu yok).
+- Siren/alarm, panelden susturmak veya "kendiliğinden susturma" süresi yazmak dışında ancak elektriği keserek susturulur (fiziksel sustur butonu yok).
 - ESP-NOW menzili açık alanda yaklaşık 50-100 m.

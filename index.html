@@ -136,6 +136,12 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <div class="small">Boş bırakırsan veya 0 yazarsan siren sen susturana kadar çalar.</div>
     <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="sirenRepeat" style="width:auto;margin:0;padding:0"> Bariyer tekrar kesilirse siren yeniden çalsın</label>
     <div class="small">Kapalıysa siren bir kez çaldıktan sonra, sen <b>Alarmı sustur</b> diyene kadar tekrar çalmaz. Açıksa her yeni kesintide yeniden çalar.</div>
+    <div class="sep"></div>
+    <label class="small" for="autoMuteSec" style="display:block">Alarm kendiliğinden susturulsun (saniye)</label>
+    <input id="autoMuteSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = ben susturana kadar">
+    <div class="small">Butona basmasan bile alarm bu süre sonunda <b>susturuldu</b> olur: siren ve ışık durur, alarm durumu temizlenir, olay kaydına yazılır. Boş veya 0 = kendiliğinden susturma yok. Alıcı kartı yaptığı için internet olmasa da çalışır.</div>
+    <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="muteSound" style="width:auto;margin:0;padding:0"> Alarm susturulunca bu cihazda ses çalsın</label>
+    <div class="small">Elle veya kendiliğinden susturulunca kısa bir "bip-bip" duyulur. Bu ayar sadece bu telefon/tarayıcı için geçerlidir.</div>
   </div>
 
   <div class="card">
@@ -186,7 +192,7 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const $ = id => document.getElementById(id);
 
-let alarm = {}, status = {}, logs = [], offset = 0, connected = true, prevSiren = null, subs = [];
+let alarm = {}, status = {}, logs = [], offset = 0, connected = true, prevSiren = null, prevActive = null, subs = [];
 
 /* ---------- yardımcılar ---------- */
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),2600); }
@@ -255,6 +261,26 @@ $("sBlink").onclick  = () => setCfg({sirenMode:"blink"});
 $("sirenMs").onchange  = e => intervalChange(e,"sirenMs");
 $("sirenSec").onchange = e => limitChange(e,"sirenSeconds");
 $("sirenRepeat").onchange = e => setCfg({sirenRepeat:e.target.checked});
+$("autoMuteSec").onchange = e => limitChange(e,"autoMuteSeconds");
+
+/* susturma sesi: bu cihazın tercihi (tarayıcı hafızasında) */
+function soundOn(){ try{ return localStorage.getItem("muteSound")!=="0"; }catch(_){ return true; } }
+$("muteSound").onchange = e => { try{ localStorage.setItem("muteSound", e.target.checked ? "1":"0"); }catch(_){} if(e.target.checked) muteBeep(true); };
+function muteBeep(force){
+  if(!force && !soundOn()) return;
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==="suspended") ctx.resume();
+    const t0 = ctx.currentTime;
+    [[660,0],[440,.22]].forEach(([f,d])=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type="sine"; o.frequency.value=f;
+      g.gain.setValueAtTime(.0001,t0+d); g.gain.exponentialRampToValueAtTime(.2,t0+d+.03); g.gain.exponentialRampToValueAtTime(.0001,t0+d+.2);
+      o.connect(g); g.connect(ctx.destination); o.start(t0+d); o.stop(t0+d+.22);
+    });
+    setTimeout(()=>ctx.close(),800);
+  }catch(_){}
+}
 
 $("lightBtn").onclick = async () => {
   const on = !alarm.lightOn;
@@ -275,6 +301,8 @@ function renderSettings(){
   setVal("sirenMs", (alarm.sirenMs || 1000)/1000);
   const ss = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
   setVal("sirenSec", ss ? ss : "");
+  setVal("autoMuteSec", alarm.autoMuteSeconds ? alarm.autoMuteSeconds : "");
+  if(document.activeElement !== $("muteSound")) $("muteSound").checked = soundOn();
   if(document.activeElement !== $("sirenRepeat")) $("sirenRepeat").checked = alarm.sirenRepeat !== false;
 
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
@@ -359,7 +387,7 @@ function renderDevices(){
 }
 
 const LABEL = {
-  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Alarm susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
+  alarm:["🚨","Alarm: ışın kesildi",true], mute:["🔇","Alarm susturuldu"], automute:["🔇","Alarm kendiliğinden susturuldu"], arm:["🟢","Sistem etkinleştirildi"],
   disarm:["⏸","Sistem devre dışı bırakıldı"], test:["🔧","Siren testi"], timeout:["⏱","Siren süre dolunca durdu"],
   light_on:["💡","Işık açıldı"], light_off:["🌑","Işık kapatıldı"]
 };
@@ -385,6 +413,9 @@ function listen(){
     alarm = s.val() || {};
     if(prevSiren===false && alarm.siren===true) alarmNotify();
     prevSiren = !!alarm.siren;
+    const active = !!(alarm.siren || alarm.triggered);
+    if(prevActive===true && !active && alarm.armed!==false) muteBeep();   // alarm susturuldu (elle veya kendiliğinden)
+    prevActive = active;
     renderHero();
   }));
   subs.push(onValue(ref(db,"status"), s => { status = s.val() || {}; renderDevices(); }));
@@ -392,7 +423,7 @@ function listen(){
     const arr=[]; s.forEach(c=>{ arr.push(c.val()); }); logs = arr.reverse(); renderLog();
   }));
 }
-function unlisten(){ subs.forEach(u=>u()); subs=[]; prevSiren=null; }
+function unlisten(){ subs.forEach(u=>u()); subs=[]; prevSiren=null; prevActive=null; }
 
 onAuthStateChanged(auth, u => {
   $("login").classList.toggle("hidden", !!u);
