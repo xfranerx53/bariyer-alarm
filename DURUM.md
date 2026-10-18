@@ -6,6 +6,7 @@
 ## 0. Dosya düzeni (tek paket, hepsi repoda)
 ```
 index.html            panel (GitHub Pages yayınlar)
+docs/ABT-I100-MANUAL.pdf   bariyerin kullanım kılavuzu
 alici/alici.ino       alıcı ESP32 kodu (COM3)  + alici/secrets.h (Wi-Fi/ESP şifresi)
 verici/verici.ino     verici ESP32 kodu (COM6)
 DURUM.md              bu dosya
@@ -51,16 +52,34 @@ ALICI --Wi-Fi--> FIREBASE Realtime Database <--> PANEL (GitHub Pages, index.html
 - Bariyer bağlantısı planı: bariyer COM→verici GND, bariyer NC→verici D27. Bariyerin 12V'u ESP32'ye ASLA bağlanmayacak. Terminal fotoğrafı henüz görülmedi, etiketler teyit edilecek.
 - Bilgisayar: Windows, Arduino IDE 2.3.10, board "ESP32 Dev Module".
 
+## 5b. Bariyer ve güç kaynağı bilgileri (kılavuzdan ve fotoğraflardan)
+- Bariyer: Opax **ABT-i100**, çift ışınlı, IP65. Besleme **DC 9-30V veya AC 9-20V**. Kılavuz: `docs/ABT-I100-MANUAL.pdf`.
+- **Verici (transmitter) birimi:** sadece 2 terminal: ①② = POWER.
+- **Alıcı (receiver) birimi:** 5 terminal: ①② = POWER, **③ = COM, ④ = NC, ⑤ = NO** (ALARM rölesi, kuru kontak, **30V DC / 1A max**). Bu modelde **tamper (kapak) terminali yok**.
+- Alarm çıkışı normalde **NC**: normal durumda COM–NC kapalı, ışın kesilince veya kablo kopunca açılır. Kodumuz buna göre yazıldı (D27 INPUT_PULLUP, COM→GND).
+- Bu "alıcı" birim (bariyerin) ile bizim ESP32 "alıcı" kartı farklı şeyler: karışmasın. Bariyerin alıcı biriminin alarm rölesi, **bizim ESP32 vericisine** bağlanacak.
+- Bariyerin 12V'u mevcut güç kaynağından: **Formel FT01-002 LED driver**, giriş 220-240V AC, çıkış **12V DC 3A (36W)**. Vidalı terminal bloğu 5 yuvalı (soldan ortadaki boş); sağdaki yeşil LED ve ayar vidası yanında. Terminal etiketleri fotoğrafta okunmuyor; kullanıcıdan güç kaynağına dokunmaması istendi (220V içerir).
+- **Kullanıcıda multimetre yok.** Doğrulama panelden yapılır: "Bariyer ışını: Normal / Kesik" göstergesi.
+- Verici ESP32 için güç: şimdilik **telefon şarj adaptörü + Type-C kablo** (220V ile uğraşmamak için). Dışarı kurulumda buck converter düşünülecek.
+
 ## 6. Yazılım durumu
 | Parça | Dosya | Durum |
 |---|---|---|
 | Panel (web) | `index.html` | **v2 yayında ve çalışıyor** (kullanıcının ekran görüntüsüyle doğrulandı). Küçük düzeltme: siren süre listesi açıkken kendiliğinden sıfırlanmıyor (bu sürümde, GitHub'a yüklenmesi gerek). |
-| Alıcı kodu | `alici/alici.ino` | **v2 yüklü ve çalışıyor** (COM3). |
+| Alıcı kodu | `alici/alici.ino` | **v3 hazır, henüz yüklenmedi** (telefondan Wi-Fi kurulumu eklendi). v2 yüklü ve çalışıyor (COM3). Verici koduna dokunulmadı, tekrar yüklemek gerekmez. |
 | Verici kodu | `verici/verici.ino` | **v2 yüklü ve çalışıyor** (COM6). |
 
 v2 özellikleri: panelde cihaz durumu (alıcı/verici çevrimiçi, Wi-Fi sinyali, bariyer kontağı), siren testi butonu, siren süre sınırı ayarı (varsayılan 60 sn, 0 = susturana kadar), olay geçmişi, tarayıcı bildirimi, şifre sıfırlama, bağlantı uyarısı.
 
 Verici ve alıcı aynı mesaj sürümünü kullanır (`MAGIC` 0xB4A10002). Kod değişirse ikisi birlikte yüklenmeli.
+
+## 6b. Alıcıda telefondan Wi-Fi kurulumu (v3)
+- **Sıfırlama:** Alıcı ESP32 açıkken kart üzerindeki **BOOT** tuşuna **3 saniye** basılı tut (LED yanar, kart yeniden başlar). Kart açılırken BOOT'a basma (yükleme moduna girer).
+- **Kurulum modu:** Kart kendi Wi-Fi ağını açar: ağ adı `Bariyer-Alici-Kurulum`, **şifresiz (açık ağ)** (kullanıcı bilerek böyle istedi; kurulum modundayken yakındaki biri Wi-Fi bilgisini değiştirebilir). Telefon bağlanınca kurulum sayfası kendiliğinden açılır (açılmazsa tarayıcıya `192.168.4.1`). Ağ listesinden seç, şifreyi yaz, Kaydet. Kart yeniden başlar ve yeni ağa bağlanır. Kurulum modunda mavi LED yanıp söner.
+- Bilgi kalıcı hafızada (NVS/Preferences) saklanır. `alici/secrets.h` içindeki Wi-Fi sadece **hiç kurulum yapılmamışsa** ilk açılışta kullanılır. Bir kez sıfırlama/kurulum yapıldıktan sonra hafızadaki bilgi geçerlidir.
+- Açılışta Wi-Fi'ye 20 sn içinde bağlanamazsa kurulum modu otomatik açılır; kayıtlı ağı 30 sn'de bir arka planda tekrar dener (telefon bağlı değilse) ve bağlanırsa kendiliğinden yeniden başlar. Yani modem sonradan açılırsa kurulum gerekmez.
+- **Kurulum modunda da siren çalışır:** ESP-NOW alarmı alınır, röle çeker, süre sınırı işler. Sadece Firebase/panel o sırada çalışmaz.
+- Kart sadece 2.4 GHz ağlara bağlanır.
 
 ## 7. Firebase veri yapısı
 ```
@@ -82,8 +101,9 @@ log/     <otomatik>{type,by,t}   type: alarm|mute|arm|disarm|test|timeout
 - ❌ Bariyer bağlanmadı, siren ve ışık yok
 
 ## 9. Sıradaki adımlar
-1. **Bariyeri bağla.** Kullanıcı bariyerin kapağını açıp terminal bloğunun net fotoğrafını çekecek (bariyer elektriği kapalıyken). Etiketler görülmeden bağlantı tarifi verilmeyecek. Kullanıcıda multimetre olup olmadığı henüz bilinmiyor.
-2. Fotoğrafa göre: bariyerin 12V adaptör bağlantısı, verici ESP32'nin kendi güç kaynağı (USB 5V veya buck converter), bariyer COM→verici GND, bariyer NC→verici D27.
+0. **Alıcıya v3 yükle** (COM3) ve BOOT tuşuyla Wi-Fi kurulumunu bir kez dene. Sonuç henüz bildirilmedi.
+1. **Bariyeri vericiye bağla** (kılavuza göre terminaller belli): bariyerin ALICI biriminde ③ COM → verici ESP32 GND, ④ NC → verici D27. Kullanıcı jumper kablonun bir ucunu kesip soyarak vidalı terminale takacak. Verici USB şarj adaptörüyle beslenecek. Önce elektrik kapalı bağlanır.
+2. Panelde "Bariyer ışını: Normal" görünmeli (ışınlar hizalıyken). Ters görünürse NC/NO karışmıştır.
 3. Bariyer bağlanınca panelde "Bariyer ışını: Normal" görünmeli. Işın kesilince alarm: verici → alıcı röle "tık" → panelde alarm ve olay kaydı. Panelden sustur.
 4. Çift ışınlı bariyerde tek ışın mı yoksa iki ışın birlikte mi alarm veriyor, kılavuzdan/denemeyle öğren.
 5. Siren (12V DC) geldiğinde röle kanal 1'e bağla: 12V(+)→COM, NO→siren(+), siren(−)→12V(−).
