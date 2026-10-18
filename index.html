@@ -76,6 +76,19 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(22px,env(safe-area-inset-bottom));background:var(--ink);color:var(--bg);
   padding:11px 18px;border-radius:12px;font-size:.92rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%;z-index:5}
 #toast.show{opacity:1}
+.set{padding:0;overflow:hidden}
+.set>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:16px 18px;font-weight:700;font-size:.98rem}
+.set>summary::-webkit-details-marker{display:none}
+.set>summary::after{content:"›";margin-left:auto;font-size:1.3rem;color:var(--mute);transition:transform .15s}
+.set[open]>summary::after{transform:rotate(90deg)}
+.set .sum{font-weight:500;font-size:.8rem;color:var(--mute);margin-left:auto;text-align:right}
+.set[open] .sum{display:none}
+.set>.body{padding:0 18px 18px;border-top:1px solid var(--line)}
+.field{margin-top:16px}
+.field>label,.lbl{display:block;font-size:.88rem;font-weight:650;margin-bottom:2px}
+.field .small{margin-top:2px}
+.check{display:flex;gap:10px;align-items:center;font-size:.95rem;font-weight:600;margin-top:16px}
+.check input{width:auto;margin:0;padding:0}
 .userbar{display:flex;gap:8px;align-items:center}
 .userbar span{font-size:.82rem;color:var(--mute);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .userbar button{width:auto;padding:7px 12px;margin:0;font-size:.85rem}
@@ -111,8 +124,8 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
   </div>
 
   <div class="card">
-    <button id="mute" class="danger">Sireni sustur</button>
-    <div class="small" id="autoInfo" style="margin-top:6px"></div>
+    <button id="mute" class="danger" style="margin-top:0">Sireni sustur</button>
+    <div class="small" id="autoInfo" style="margin:6px 2px 0"></div>
     <button id="arm" class="alt">…</button>
   </div>
 
@@ -123,61 +136,95 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
     <div class="row"><div><b>Bariyer ışını</b><div class="small" id="beamInfo">Vericiden gelen son bilgi</div></div><span class="chip na" id="beamChip">—</span></div>
   </div>
 
-  <div class="card">
-    <h2>Zamanlama</h2>
-    <label class="small" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="schedOn" style="width:auto;margin:0;padding:0"> Sadece belirlediğim gün ve saatlerde koru</label>
-    <div class="small">Kapalıysa sistem, etkin olduğu sürece her an korur. Açıksa seçtiğin saatler dışında ışın kesilse bile alarm çalmaz. Saatler Türkiye saatidir.</div>
-    <div class="two" style="margin-top:8px">
-      <div><label class="small" for="schedStart">Başlangıç</label><input id="schedStart" type="time" value="00:00"></div>
-      <div><label class="small" for="schedEnd">Bitiş</label><input id="schedEnd" type="time" value="00:00"></div>
+  <h2 style="margin:20px 4px 10px">Ayarlar</h2>
+
+  <details class="card set">
+    <summary>🔇 Alarmı susturma <span class="sum" id="sumMute"></span></summary>
+    <div class="body">
+      <label class="check"><input type="checkbox" id="autoMuteOn"> Otomatik susturma açık</label>
+      <div class="field">
+        <label for="autoMuteSec">Kaç saniye sonra kendiliğinden susturulsun?</label>
+        <input id="autoMuteSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = siren ve ışık sürelerine göre">
+        <div class="small">Alarmdan bu kadar saniye sonra, sen butona basmasan bile alarm susturulur: siren ve ışık durur, alarm durumu temizlenir. İstediğin süreyi yaz (örnek 30). Boş bırakırsan siren ve ışık sürelerinden uzun olanı beklenir; biri süresizse otomatik susturma olmaz.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="muteSound"> Susturulunca bu cihazda ses çalsın</label>
+      <div class="small">Kısa bir "bip-bip" duyulur. Sadece bu telefon/tarayıcı için geçerlidir, sayfa açık olmalıdır.</div>
     </div>
-    <div class="small">Başlangıç ve bitiş aynıysa seçili günlerde 24 saat korur. Başlangıç bitişten büyükse gece yarısını geçer (örnek 22:00 – 06:00).</div>
-    <label class="small" style="display:block;margin-top:12px">Günler</label>
-    <div id="days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px"></div>
-    <div class="small" id="schedInfo" style="margin-top:10px"></div>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>Siren ayarları</h2>
-    <button id="test" class="alt">Siren testi</button>
-    <div class="small" style="margin-top:8px">Sireni aşağıda ayarladığın çalışma şekliyle ve süreyle çalıştırır (en fazla 10 saniye; süre boşsa 3 saniye). Alarmda ışık yansın seçiliyse ışık da yanar.</div>
-    <label class="small" style="display:block;margin-top:14px">Çalışma şekli</label>
-    <div class="two"><button id="sSteady" class="alt">Sürekli</button><button id="sBlink" class="alt">Aralıklı</button></div>
-    <label class="small" for="sirenMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi (saniye, en az 0,1)</label>
-    <input id="sirenMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1">
-    <div class="small">Siren yazdığın süre kadar çalar, aynı süre kadar susar.</div>
-    <label class="small" for="sirenSec" style="display:block;margin-top:12px">Siren en fazla ne kadar çalsın? (saniye)</label>
-    <input id="sirenSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = ben susturana kadar">
-    <div class="small">Boş bırakırsan veya 0 yazarsan siren sen susturana kadar çalar.</div>
-    <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="sirenRepeat" style="width:auto;margin:0;padding:0"> Bariyer tekrar kesilirse siren yeniden çalsın</label>
-    <div class="small">Kapalıysa siren bir kez çaldıktan sonra, sen <b>Alarmı sustur</b> diyene kadar tekrar çalmaz. Açıksa her yeni kesintide yeniden çalar.</div>
-    <div class="sep"></div>
-    <div class="small"><b>Otomatik susturma:</b> Siren ve ışık için yazdığın en fazla süreler dolunca "Alarmı sustur" kendiliğinden uygulanır (ikisinden uzun olanı beklenir). Siren veya alarmdaki ışık süresiz ise otomatik susturma olmaz.</div>
-    <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="muteSound" style="width:auto;margin:0;padding:0"> Alarm susturulunca bu cihazda ses çalsın</label>
-    <div class="small">Elle veya kendiliğinden susturulunca kısa bir "bip-bip" duyulur. Bu ayar sadece bu telefon/tarayıcı için geçerlidir.</div>
-  </div>
+  <details class="card set">
+    <summary>🔔 Siren <span class="sum" id="sumSiren"></span></summary>
+    <div class="body">
+      <button id="test" class="alt">Siren testi</button>
+      <div class="small" style="margin-top:6px">Sireni aşağıdaki ayarlarla en fazla 10 saniye çalıştırır (süre boşsa 3 saniye).</div>
+      <div class="field">
+        <label>Çalışma şekli</label>
+        <div class="two"><button id="sSteady" class="alt">Sürekli</button><button id="sBlink" class="alt">Aralıklı</button></div>
+      </div>
+      <div class="field">
+        <label for="sirenMs">Aralık süresi (saniye, en az 0,1)</label>
+        <input id="sirenMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1">
+        <div class="small">Sadece aralıklı modda: yazdığın süre kadar çalar, aynı süre kadar susar.</div>
+      </div>
+      <div class="field">
+        <label for="sirenSec">Siren en fazla ne kadar çalsın? (saniye)</label>
+        <input id="sirenSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = ben susturana kadar">
+        <div class="small">Boş veya 0 = sen susturana kadar çalar.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="sirenRepeat"> Bariyer tekrar kesilirse siren yeniden çalsın</label>
+      <div class="small">Kapalıysa siren, alarm susturulana kadar bir kez çalar.</div>
+    </div>
+  </details>
 
-  <div class="card">
-    <h2>Işık ayarları</h2>
-    <button id="lightBtn" class="alt">Işığı aç</button>
-    <label class="small" style="display:block;margin-top:14px">Çalışma şekli</label>
-    <div class="two"><button id="mSteady" class="alt">Sürekli</button><button id="mBlink" class="alt">Aralıklı</button></div>
-    <label class="small" for="lightMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi (saniye, en az 0,1)</label>
-    <input id="lightMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1">
-    <div class="small">Işık yazdığın süre kadar yanar, aynı süre kadar söner. Çok kısa süreler rölenin ömrünü kısaltır.</div>
-    <label class="small" style="display:flex;gap:10px;align-items:center;margin-top:12px"><input type="checkbox" id="lightAlarm" style="width:auto;margin:0;padding:0"> Alarm olunca ışık kendiliğinden yansın</label>
-    <label class="small" for="lightSec" style="display:block;margin-top:12px">Alarmda ışık en fazla ne kadar yansın? (saniye)</label>
-    <input id="lightSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = alarm sürdüğü sürece">
-    <div class="small">Boş bırakırsan ışık alarm susturulana kadar yanar. Elle açtığın ışık bu süreden etkilenmez.</div>
-  </div>
+  <details class="card set">
+    <summary>💡 Işık <span class="sum" id="sumLight"></span></summary>
+    <div class="body">
+      <button id="lightBtn" class="alt">Işığı aç</button>
+      <div class="field">
+        <label>Çalışma şekli</label>
+        <div class="two"><button id="mSteady" class="alt">Sürekli</button><button id="mBlink" class="alt">Aralıklı</button></div>
+      </div>
+      <div class="field">
+        <label for="lightMs">Aralık süresi (saniye, en az 0,1)</label>
+        <input id="lightMs" type="number" inputmode="decimal" min="0.1" max="60" step="0.1" value="1">
+        <div class="small">Sadece aralıklı modda. Çok kısa süreler rölenin ömrünü kısaltır.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="lightAlarm"> Alarm olunca ışık kendiliğinden yansın</label>
+      <div class="field">
+        <label for="lightSec">Alarmda ışık en fazla ne kadar yansın? (saniye)</label>
+        <input id="lightSec" type="number" inputmode="numeric" min="0" step="1" placeholder="Boş = alarm sürdüğü sürece">
+        <div class="small">Elle açtığın ışık bu süreden etkilenmez.</div>
+      </div>
+    </div>
+  </details>
 
-  <div class="card">
-    <h2>Bildirim</h2>
-    <button class="alt" id="notif">Bildirimleri aç</button>
-    <div class="small" style="margin-top:8px">Bildirim sadece bu sayfa açıkken gelir (sekme arka planda olabilir).</div>
-  </div>
+  <details class="card set">
+    <summary>🕒 Zamanlama <span class="sum" id="sumSched"></span></summary>
+    <div class="body">
+      <label class="check"><input type="checkbox" id="schedOn"> Sadece belirlediğim gün ve saatlerde koru</label>
+      <div class="small">Kapalıysa sistem, etkin olduğu sürece her an korur. Saatler Türkiye saatidir.</div>
+      <div class="two field">
+        <div><label for="schedStart">Başlangıç</label><input id="schedStart" type="time" value="00:00"></div>
+        <div><label for="schedEnd">Bitiş</label><input id="schedEnd" type="time" value="00:00"></div>
+      </div>
+      <div class="small">Başlangıç ve bitiş aynıysa seçili günlerde 24 saat korur. Başlangıç bitişten büyükse gece yarısını geçer (örnek 22:00 – 06:00).</div>
+      <div class="field">
+        <label>Günler</label>
+        <div id="days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px"></div>
+      </div>
+      <div class="small" id="schedInfo" style="margin-top:12px"></div>
+    </div>
+  </details>
 
-  <div class="card">
+  <details class="card set">
+    <summary>📱 Bildirim</summary>
+    <div class="body">
+      <button class="alt" id="notif">Bildirimleri aç</button>
+      <div class="small" style="margin-top:8px">Bildirim sadece bu sayfa açıkken gelir (sekme arka planda olabilir).</div>
+    </div>
+  </details>
+
+  <div class="card" style="margin-top:12px">
     <h2>Son olaylar</h2>
     <ul id="log"><li class="small">Henüz kayıt yok</li></ul>
   </div>
@@ -274,6 +321,8 @@ $("sBlink").onclick  = () => setCfg({sirenMode:"blink"});
 $("sirenMs").onchange  = e => intervalChange(e,"sirenMs");
 $("sirenSec").onchange = e => limitChange(e,"sirenSeconds");
 $("sirenRepeat").onchange = e => setCfg({sirenRepeat:e.target.checked});
+$("autoMuteOn").onchange = e => setCfg({autoMuteOn:e.target.checked});
+$("autoMuteSec").onchange = e => limitChange(e,"autoMuteSeconds");
 
 /* ---------- zamanlama ---------- */
 const DAYN = ["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
@@ -292,6 +341,14 @@ function istNow(){                         // Türkiye saati: {gün 0=Pzt, dakik
   const p = new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Istanbul",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(now()));
   const g = t => p.find(x=>x.type===t).value;
   return { day:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].indexOf(g("weekday")), min:(+g("hour"))*60+(+g("minute")) };
+}
+function autoSecs(){                       // alıcıdaki hesapla aynı
+  if(alarm.autoMuteOn === false) return 0;
+  if(alarm.autoMuteSeconds > 0) return alarm.autoMuteSeconds;
+  const sl = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
+  const lUsed = alarm.lightAlarm !== false, ll = alarm.lightSeconds || 0;
+  if(sl <= 0 || (lUsed && ll <= 0)) return 0;
+  return Math.max(sl, lUsed ? ll : 0);
 }
 function inSchedule(){                     // alıcıdaki hesapla aynı
   if(!alarm.schedOn) return true;
@@ -350,11 +407,14 @@ function renderSettings(){
   [...$("days").children].forEach(b=>b.style.opacity = alarm.schedOn ? 1 : .5);
   $("schedStart").disabled = $("schedEnd").disabled = !alarm.schedOn;
   $("schedInfo").textContent = !alarm.schedOn ? "Zamanlama kapalı." : (inSchedule() ? "Şu an koruma saatleri içinde: koruma devrede." : "Şu an koruma saatleri dışında: alarm çalmaz.");
-  const sl = alarm.sirenSeconds === undefined ? 60 : alarm.sirenSeconds;
-  const ll = alarm.lightAlarm !== false ? (alarm.lightSeconds||0) : -1;   // -1: alarmda ışık yok
-  $("autoInfo").textContent = (sl>0 && ll!==0)
-    ? "Otomatik susturma: alarmdan "+Math.max(sl, ll>0?ll:0)+" sn sonra kendiliğinden susturulur."
-    : "Otomatik susturma kapalı (siren veya alarm ışığı süresi sınırsız).";
+  const au = autoSecs();
+  $("autoInfo").textContent = au ? "Otomatik susturma: alarmdan "+au+" sn sonra kendiliğinden susturulur." : "Otomatik susturma kapalı.";
+  if(document.activeElement !== $("autoMuteOn")) $("autoMuteOn").checked = alarm.autoMuteOn !== false;
+  setVal("autoMuteSec", alarm.autoMuteSeconds ? alarm.autoMuteSeconds : "");
+  $("autoMuteSec").disabled = alarm.autoMuteOn === false;
+  $("sumMute").textContent = au ? au+" sn sonra" : "Kapalı";
+  $("sumSiren").textContent = (sBlink ? "Aralıklı "+((alarm.sirenMs||1000)/1000)+" sn" : "Sürekli") + " · " + (ss ? ss+" sn" : "süresiz");
+  $("sumSched").textContent = alarm.schedOn ? fromMin(alarm.schedStart)+" – "+fromMin(alarm.schedEnd) : "Kapalı";
   const on = !!alarm.lightOn, blink = alarm.lightMode==="blink";
   $("lightBtn").textContent = on ? "Işığı kapat" : "Işığı aç";
   $("lightBtn").className = on ? "" : "alt";
@@ -364,6 +424,7 @@ function renderSettings(){
   setVal("lightMs", (alarm.lightMs || 1000)/1000);
   setVal("lightSec", alarm.lightSeconds ? alarm.lightSeconds : "");
   if(document.activeElement !== $("lightAlarm")) $("lightAlarm").checked = alarm.lightAlarm !== false;
+  $("sumLight").textContent = (blink ? "Aralıklı "+((alarm.lightMs||1000)/1000)+" sn" : "Sürekli") + " · " + (alarm.lightAlarm === false ? "alarmda yanmaz" : (alarm.lightSeconds ? alarm.lightSeconds+" sn" : "alarm boyunca"));
 }
 
 /* ---------- giriş ---------- */

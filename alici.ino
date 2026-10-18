@@ -1,12 +1,12 @@
-// ALICI (ESP32 #2)  |  Sürüm 3.4
+// ALICI (ESP32 #2)  |  Sürüm 3.5
 // Görevi: vericiden ESP-NOW ile alarm almak, siren rölesini çekmek,
 // Firebase'e bildirmek, panelden gelen komutları (sustur, test, süre, devre dışı) uygulamak.
 // YENİ (v3): Wi-Fi telefondan ayarlanır. BOOT tuşuna kart açıkken 3 saniye basınca
 //            kart "Bariyer-Alici-Kurulum" adında kendi Wi-Fi ağını açar, telefondan bağlanıp
 //            yeni Wi-Fi bilgisi girilir.
-// v3.3/3.4:  Otomatik susturma. Siren ve ışığın panelde seçilen süreleri (ikisi de) dolunca alarm,
-//            sen butona basmasan bile kendiliğinden susturulur ("Alarmı sustur" otomatik basılır).
-//            Siren veya alarm ışığı süresiz (boş/0) ise otomatik susturma yoktur.
+// v3.3-3.5:  Otomatik susturma. Panelde yazılan saniye sonra alarm, sen butona basmasan bile
+//            kendiliğinden susturulur ("Alarmı sustur" otomatik basılır). Süre boşsa siren ve
+//            alarm ışığı sürelerinden uzun olanı beklenir; biri süresizse otomatik susturma yoktur.
 // YENİ (v3.4): Zamanlama. Panelden seçilen saat aralığı ve günlerde koruma devrededir, dışında alarm vermez.
 //            Saat NTP ile alınır (Türkiye saati, UTC+3). Saat alınamazsa güvenli tarafta kalır: koruma açık.
 // Röle modülü: IN1 -> D26 (siren), IN2 -> D25 (ışık), VCC -> VIN, GND -> GND
@@ -23,7 +23,7 @@
 #include "secrets.h"
 
 const char* API_KEY = "AIzaSyDGam4xOxat4xeGIWihrkyggBBBn3Vp3mk";
-const char* FW = "3.4";                 // yazılım sürümü (panelde görünür)
+const char* FW = "3.5";                 // yazılım sürümü (panelde görünür)
 const char* DB_URL  = "https://bariyer-alarm-default-rtdb.europe-west1.firebasedatabase.app";
 
 const int SIREN_PIN = 26;
@@ -58,6 +58,8 @@ volatile uint8_t vContact = 0;       // 1 = bariyer kontağı açık
 volatile unsigned long testUntil = 0;
 unsigned long lastStatus = 0, lastMacPrint = 0;
 volatile int sirenSeconds = 60;      // panelden ayarlanır, 0 = susturana kadar
+volatile bool autoMuteOn = true;      // otomatik susturma açık mı (panelden)
+volatile int autoMuteSeconds = 0;    // otomatik susturma süresi, 0 = siren/ışık sürelerine göre (panelden)
 volatile bool schedOn = false;       // zamanlama açık mı (panelden)
 volatile int schedStartMin = 0;      // koruma başlangıcı (gün başından dakika)
 volatile int schedEndMin = 0;        // koruma bitişi (başlangıçla aynıysa 24 saat)
@@ -177,13 +179,17 @@ void outputTask(void*) {
     // Zamanlama (saniyede bir)
     if (now - lastSched > 1000) { lastSched = now; schedActiveNow = computeSched(); }
 
-    // Otomatik susturma: siren ve ışık süreleri dolunca alarm kendiliğinden susturulur
-    // (siren süresiz veya alarm ışığı süresizse otomatik susturma yok)
+    // Otomatik susturma: panelde yazılan süre (boşsa siren/ışık sürelerinden uzun olanı) dolunca alarm kendiliğinden susturulur
     int autoSec = 0;
     {
-      int sl = sirenSeconds, ll = lightWithAlarm ? lightSeconds : 0;
-      bool unlimited = (sl <= 0) || (lightWithAlarm && ll <= 0);
-      if (!unlimited) autoSec = sl > ll ? sl : ll;
+      if (autoMuteOn) {
+        if (autoMuteSeconds > 0) autoSec = autoMuteSeconds;
+        else {
+          int sl = sirenSeconds, ll = lightWithAlarm ? lightSeconds : 0;
+          bool unlimited = (sl <= 0) || (lightWithAlarm && ll <= 0);
+          if (!unlimited) autoSec = sl > ll ? sl : ll;
+        }
+      }
     }
     if (alarmActive && (!prevAuto || alarmSeq != seenSeq)) autoStart = now;   // yeni alarm: sayaç baştan
     prevAuto = alarmActive; seenSeq = alarmSeq;
@@ -435,6 +441,9 @@ void loop() {
       bool fbSiren = r.indexOf("\"siren\":true") >= 0;
       int i = r.indexOf("\"sirenSeconds\":");
       sirenSeconds = (i >= 0) ? r.substring(i + 15).toInt() : 60;
+      autoMuteOn = r.indexOf("\"autoMuteOn\":false") < 0;
+      int am = r.indexOf("\"autoMuteSeconds\":");
+      autoMuteSeconds = (am >= 0) ? r.substring(am + 18).toInt() : 0;
       schedOn = r.indexOf("\"schedOn\":true") >= 0;
       int z = r.indexOf("\"schedStart\":");
       schedStartMin = (z >= 0) ? r.substring(z + 13).toInt() : 0;
