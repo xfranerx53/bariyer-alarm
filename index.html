@@ -124,8 +124,8 @@ button.link{background:none;border:0;color:var(--mute);font-weight:500;font-size
 
   <div class="card">
     <h2>Siren ayarları</h2>
-    <button id="test" class="alt">Siren testi (3 saniye)</button>
-    <div class="small" style="margin-top:8px">Alıcıdaki röleyi 3 saniye çalıştırır. Işık da alarmda yansın seçiliyse o da yanar.</div>
+    <button id="test" class="alt">Siren testi</button>
+    <div class="small" style="margin-top:8px">Sireni aşağıda ayarladığın çalışma şekliyle ve süreyle çalıştırır (en fazla 10 saniye; süre boşsa 3 saniye). Alarmda ışık yansın seçiliyse ışık da yanar.</div>
     <label class="small" style="display:block;margin-top:14px">Çalışma şekli</label>
     <div class="two"><button id="sSteady" class="alt">Sürekli</button><button id="sBlink" class="alt">Aralıklı</button></div>
     <label class="small" for="sirenMs" style="display:block;margin-top:12px">Aralıklı modda aralık süresi (saniye, en az 0,1)</label>
@@ -216,7 +216,7 @@ $("arm").onclick = async () => {
   if(await act(on?"arm":"disarm",{armed:on,siren:false,triggered:false})) toast(on?"Sistem etkin":"Sistem devre dışı");
 };
 $("test").onclick = async () => {
-  if(await act("test",{test:true})) toast("Test komutu gönderildi. Alıcıda röle tıklamalı.");
+  if(await act("test",{test:true})) toast("Test komutu gönderildi");
 };
 $("notif").onclick = async () => {
   if(!("Notification" in window)) return toast("Bu tarayıcı bildirimi desteklemiyor");

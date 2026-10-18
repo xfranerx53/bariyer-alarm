@@ -49,9 +49,8 @@ volatile bool offPending = false;    // süre dolduğu için Firebase'e "siren k
 volatile bool vSeen = false;         // vericiden kalp atışı geldi
 volatile uint8_t vContact = 0;       // 1 = bariyer kontağı açık
 volatile unsigned long testUntil = 0;
-bool wasOn = false;
-unsigned long sirenStart = 0, lastStatus = 0, lastMacPrint = 0;
-int sirenSeconds = 60;               // panelden ayarlanır, 0 = susturana kadar
+unsigned long lastStatus = 0, lastMacPrint = 0;
+volatile int sirenSeconds = 60;      // panelden ayarlanır, 0 = susturana kadar
 
 // Siren ve ışık ayarları (ikisi birbirinden bağımsız, panelden gelir)
 volatile bool alarmActive = false;       // alarm verildi ve henüz susturulmadı (siren süresi dolsa da sürer)
@@ -133,11 +132,20 @@ void uiTask(void*) {
 // Siren ve ışık rölelerini ayrı bir görev yönetir: ağ işlemleri sırasında bile
 // yanıp sönme düzgün kalır ve alarm gelince röle hemen çeker.
 void outputTask(void*) {
-  bool prevAlarm = false;
-  unsigned long alarmStart = 0;
+  bool prevAlarm = false, prevSiren = false;
+  unsigned long alarmStart = 0, sirenStartT = 0;
   for (;;) {
     unsigned long now = millis();
     bool testActive = (long)(testUntil - now) > 0;
+
+    // Siren süre sınırı (20 ms hassasiyet, internet olmasa da çalışır)
+    if (sirenOn && !prevSiren) sirenStartT = now;
+    prevSiren = sirenOn;
+    if (sirenOn && sirenSeconds > 0 && now - sirenStartT >= (unsigned long)sirenSeconds * 1000UL) {
+      offPending = true;      // önce bayrak, sonra kapat (ana döngü araya girip geri açmasın)
+      sirenOn = false;
+      prevSiren = false;
+    }
 
     // SIREN
     bool sOut = sirenOn || testActive;
@@ -317,18 +325,6 @@ void setup() {
   }
 }
 
-void sirenLogic() {
-  // Siren süre sınırı (internet olmasa da çalışır)
-  if (sirenOn && !wasOn) sirenStart = millis();
-  wasOn = sirenOn;
-  if (sirenOn && sirenSeconds > 0 && millis() - sirenStart > (unsigned long)sirenSeconds * 1000UL) {
-    sirenOn = false;
-    offPending = true;
-    Serial.println("Siren suresi doldu, kapatildi");
-  }
-  
-}
-
 void loop() {
   if (restartAt && millis() > restartAt) ESP.restart();
 
@@ -336,7 +332,6 @@ void loop() {
   if (portalMode) {
     dns.processNextRequest();
     server.handleClient();
-    sirenLogic();
     if (wifiSsid != "" && WiFi.softAPgetStationNum() == 0 && millis() - lastRetry > 30000) {
       lastRetry = millis();
       WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());     // modem sonradan açılırsa kendiliğinden döner
@@ -356,7 +351,6 @@ void loop() {
     Serial.printf("ALICI MAC: %s  kanal:%d  sinyal:%d dBm\n", WiFi.macAddress().c_str(), WiFi.channel(), WiFi.RSSI());
   }
 
-  sirenLogic();
   ensureAuth();
   if (idToken != "") {
     // 1) Bekleyen alarmı Firebase'e bildir
@@ -395,8 +389,9 @@ void loop() {
       if (lms > 60000) lms = 60000;
       lightMs = lms;
       if (r.indexOf("\"test\":true") >= 0) {
-        testUntil = millis() + 3000;
-        Serial.println("PANEL TESTI: siren 3 sn");
+        int tsec = (sirenSeconds > 0) ? (sirenSeconds > 10 ? 10 : (int)sirenSeconds) : 3;
+        testUntil = millis() + (unsigned long)tsec * 1000UL;
+        Serial.printf("PANEL TESTI: siren %d sn\n", tsec);
         dbPatch("/alarm", "{\"test\":false}");
       }
       bool fbTrig = r.indexOf("\"triggered\":true") >= 0;
